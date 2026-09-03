@@ -42,6 +42,7 @@ import {
   Message,
   ChatSession,
   getUserSessions,
+  fetchUserSessionsFromCloud,
   saveUserSession,
   createNewSession,
   deleteUserSession,
@@ -169,12 +170,13 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  const loadUserSessions = (username: string) => {
-    const userSessions = getUserSessions(username);
-    setSessions(userSessions);
+  const loadUserSessions = async (username: string) => {
+    // 1. Instant local render
+    const localSessions = getUserSessions(username);
+    setSessions(localSessions);
 
-    if (userSessions.length > 0) {
-      const active = userSessions[0];
+    if (localSessions.length > 0) {
+      const active = localSessions[0];
       setCurrentSessionId(active.id);
       setMessages(active.messages || []);
     } else {
@@ -183,6 +185,21 @@ export default function Home() {
       setSessions([freshSession]);
       setCurrentSessionId(freshSession.id);
       setMessages([]);
+    }
+
+    // 2. Synchronize from Neon DB
+    try {
+      const cloudSessions = await fetchUserSessionsFromCloud(username);
+      if (cloudSessions.length > 0) {
+        setSessions(cloudSessions);
+        // If current session is empty, focus on latest cloud session
+        if (localSessions.length === 0 || (localSessions.length === 1 && localSessions[0].messages.length === 0)) {
+          setCurrentSessionId(cloudSessions[0].id);
+          setMessages(cloudSessions[0].messages || []);
+        }
+      }
+    } catch (err) {
+      console.debug('Cloud sync deferred:', err);
     }
   };
 
@@ -204,12 +221,12 @@ export default function Home() {
   };
 
   // Auth Handlers
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
 
     if (authTab === 'login') {
-      const res = loginUser(authUsername, authPassword);
+      const res = await loginUser(authUsername, authPassword);
       if (!res.success || !res.user) {
         setAuthError(res.error || 'Login failed');
         return;
@@ -218,9 +235,9 @@ export default function Home() {
       setShowAuthModal(false);
       setAuthUsername('');
       setAuthPassword('');
-      loadUserSessions(res.user.username);
+      await loadUserSessions(res.user.username);
     } else {
-      const res = registerUser(authUsername, authPassword);
+      const res = await registerUser(authUsername, authPassword);
       if (!res.success || !res.user) {
         setAuthError(res.error || 'Registration failed');
         return;
@@ -229,7 +246,7 @@ export default function Home() {
       setShowAuthModal(false);
       setAuthUsername('');
       setAuthPassword('');
-      loadUserSessions(res.user.username);
+      await loadUserSessions(res.user.username);
     }
   };
 

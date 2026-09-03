@@ -22,7 +22,7 @@ function getStorageKey(userId: string): string {
 }
 
 /**
- * Retrieve all chat sessions for a specific user
+ * Retrieve all chat sessions for a specific user from local cache
  */
 export function getUserSessions(userId: string): ChatSession[] {
   if (typeof window === 'undefined') return [];
@@ -38,18 +38,58 @@ export function getUserSessions(userId: string): ChatSession[] {
 }
 
 /**
- * Save or update a chat session
+ * Fetch and synchronize chat sessions from Neon DB cloud
+ */
+export async function fetchUserSessionsFromCloud(userId: string): Promise<ChatSession[]> {
+  if (typeof window === 'undefined' || !userId) return [];
+
+  // Local fallback baseline
+  const local = getUserSessions(userId);
+
+  try {
+    const res = await fetch(`/api/chats?userId=${encodeURIComponent(userId)}`);
+    if (!res.ok) return local;
+
+    const data = await res.json();
+    if (data.dbConfigured && data.success && Array.isArray(data.sessions)) {
+      const cloudSessions: ChatSession[] = data.sessions;
+
+      // Merge cloud and local, taking whichever has higher updatedAt
+      const mergedMap = new Map<string, ChatSession>();
+      for (const s of local) mergedMap.set(s.id, s);
+      for (const s of cloudSessions) {
+        const existing = mergedMap.get(s.id);
+        if (!existing || s.updatedAt >= existing.updatedAt) {
+          mergedMap.set(s.id, s);
+        }
+      }
+
+      const mergedList = Array.from(mergedMap.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+      localStorage.setItem(getStorageKey(userId), JSON.stringify(mergedList));
+      return mergedList;
+    }
+  } catch (err) {
+    console.warn('Could not sync with Neon DB, using local cache:', err);
+  }
+
+  return local;
+}
+
+/**
+ * Save or update a chat session (optimistic local + Neon cloud background sync)
  */
 export function saveUserSession(session: ChatSession): void {
   if (typeof window === 'undefined') return;
+
+  const updatedSession: ChatSession = {
+    ...session,
+    updatedAt: Date.now(),
+  };
+
+  // 1. Optimistic Local Save
   try {
     const sessions = getUserSessions(session.userId);
     const existingIndex = sessions.findIndex(s => s.id === session.id);
-
-    const updatedSession: ChatSession = {
-      ...session,
-      updatedAt: Date.now(),
-    };
 
     if (existingIndex >= 0) {
       sessions[existingIndex] = updatedSession;
@@ -59,8 +99,18 @@ export function saveUserSession(session: ChatSession): void {
 
     localStorage.setItem(getStorageKey(session.userId), JSON.stringify(sessions));
   } catch (err) {
-    console.error('Failed to save chat session:', err);
+    console.error('Failed to save chat session locally:', err);
   }
+
+  // 2. Background Neon Cloud Sync
+  fetch('/api/chats', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updatedSession),
+  }).catch(err => {
+    // Non-blocking fallback
+    console.debug('Neon DB background sync deferred:', err);
+  });
 }
 
 /**
@@ -81,34 +131,56 @@ export function createNewSession(userId: string): ChatSession {
 }
 
 /**
- * Delete a specific chat session
+ * Delete a specific chat session (optimistic local + Neon cloud sync)
  */
 export function deleteUserSession(userId: string, sessionId: string): void {
   if (typeof window === 'undefined') return;
+
+  // 1. Optimistic Local Delete
   try {
     const sessions = getUserSessions(userId).filter(s => s.id !== sessionId);
     localStorage.setItem(getStorageKey(userId), JSON.stringify(sessions));
   } catch (err) {
-    console.error('Failed to delete chat session:', err);
+    console.error('Failed to delete chat session locally:', err);
   }
+
+  // 2. Background Neon Cloud Delete
+  fetch(`/api/chats/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  }).catch(err => {
+    console.debug('Neon DB background delete deferred:', err);
+  });
 }
 
 /**
- * Update the title of a specific session
+ * Update the title of a specific session (optimistic local + Neon cloud sync)
  */
 export function updateSessionTitle(userId: string, sessionId: string, newTitle: string): void {
   if (typeof window === 'undefined') return;
+
+  const trimmed = newTitle.trim() || 'Untitled Chat';
+
+  // 1. Optimistic Local Rename
   try {
     const sessions = getUserSessions(userId);
     const target = sessions.find(s => s.id === sessionId);
     if (target) {
-      target.title = newTitle.trim() || 'Untitled Chat';
+      target.title = trimmed;
       target.updatedAt = Date.now();
       localStorage.setItem(getStorageKey(userId), JSON.stringify(sessions));
     }
   } catch (err) {
-    console.error('Failed to update session title:', err);
+    console.error('Failed to update session title locally:', err);
   }
+
+  // 2. Background Neon Cloud Rename
+  fetch(`/api/chats/${encodeURIComponent(sessionId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: trimmed }),
+  }).catch(err => {
+    console.debug('Neon DB background rename deferred:', err);
+  });
 }
 
 /**

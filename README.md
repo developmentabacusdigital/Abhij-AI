@@ -213,8 +213,37 @@ http://localhost:3000/admin
 | `OPENROUTER_MODEL` | No | `google/gemma-3-12b-it` | OpenRouter model identifier. Supports any Gemma or OpenRouter model. |
 | `LLM_TEMPERATURE` | No | `0.2` | Temperature controlling creativity vs grounding. `0.2` is ideal for factual adherence. |
 | `ADMIN_PASSWORD` | No | `admin123` | Secret passcode to unlock the `/admin` dashboard. |
+| `DATABASE_URL` | No (falls back to local storage) | `""` | Neon PostgreSQL connection string for cross-device authentication and cloud chat history sync. |
 | `NEXT_PUBLIC_SITE_NAME` | No | `Abhij-AI` | Branding title used across headers and prompts. |
 | `NEXT_PUBLIC_SITE_URL` | No | `http://localhost:3000` | Site URL for OpenRouter ranking headers. |
+
+---
+
+## 🐘 Neon Serverless PostgreSQL Setup
+
+Abhij-AI supports **Neon Serverless PostgreSQL** for cloud accounts and multi-device chat history synchronization.
+
+### 1. Create a Free Neon Database
+1. Go to [https://neon.tech](https://neon.tech) and create a free account.
+2. Click **Create Project** (e.g. `abhij-ai`).
+3. Under the **Dashboard**, copy your PostgreSQL connection string:
+   ```
+   postgresql://[user]:[password]@[endpoint].neon.tech/[dbname]?sslmode=require
+   ```
+
+### 2. Configure Locally
+Paste it into your `.env.local`:
+```bash
+DATABASE_URL="postgresql://[user]:[password]@[endpoint].neon.tech/[dbname]?sslmode=require"
+```
+
+### 3. Configure on Vercel
+In your Vercel project dashboard:
+1. Go to **Settings** → **Environment Variables**.
+2. Add `DATABASE_URL` with your Neon connection string.
+3. Redeploy or trigger a git push.
+
+*(Tables `users`, `chat_sessions`, and `chat_messages` are auto-created on initial query! No manual migration scripts needed.)*
 
 ---
 

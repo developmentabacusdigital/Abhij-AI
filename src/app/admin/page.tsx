@@ -22,6 +22,7 @@ import {
   FileCode,
   HardDrive,
   Layers,
+  Database,
   ZoomIn
 } from 'lucide-react';
 
@@ -68,6 +69,25 @@ export default function AdminPage() {
     }
   }, []);
 
+  const [dbStatus, setDbStatus] = useState<{
+    configured: boolean;
+    connected?: boolean;
+    driver?: string;
+    stats?: { users: number; sessions: number; messages: number };
+  } | null>(null);
+
+  const fetchDbStatus = async (key: string) => {
+    try {
+      const res = await fetch('/api/admin/db-status', {
+        headers: { 'x-admin-key': key },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDbStatus(data);
+      }
+    } catch {}
+  };
+
   const verifyAndLoad = async (keyToVerify: string) => {
     setIsLoading(true);
     setAuthError('');
@@ -93,6 +113,7 @@ export default function AdminPage() {
         setDocuments(data.documents || []);
         setIsAuthenticated(true);
         sessionStorage.setItem('abhij_admin_key', keyToVerify);
+        fetchDbStatus(keyToVerify);
       } else {
         throw new Error('Failed to load documents');
       }
@@ -134,6 +155,7 @@ export default function AdminPage() {
       setDocuments(data.documents || []);
       setIsAuthenticated(true);
       sessionStorage.setItem('abhij_admin_key', cleanKey);
+      fetchDbStatus(cleanKey);
       showToast('success', 'Admin session unlocked successfully');
     } catch (err) {
       setAuthError('Authentication failed. Please check network connection.');
@@ -445,6 +467,31 @@ export default function AdminPage() {
             <div className="stat-info">
               <div className="stat-value">{formatBytes(totalBytes)}</div>
               <div className="stat-label">Storage Used</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon-box">
+              <Database size={20} />
+            </div>
+            <div className="stat-info">
+              <div className="stat-value" style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    backgroundColor: dbStatus?.connected ? '#10b981' : '#f59e0b',
+                    display: 'inline-block',
+                    boxShadow: dbStatus?.connected ? '0 0 6px #10b981' : 'none',
+                  }}
+                />
+                <span>{dbStatus?.connected ? 'Neon Postgres' : 'Local Storage'}</span>
+              </div>
+              <div className="stat-label">
+                {dbStatus?.connected
+                  ? `${dbStatus.stats?.users || 0} users · ${dbStatus.stats?.sessions || 0} chats`
+                  : 'Database Engine'}
+              </div>
             </div>
           </div>
         </section>

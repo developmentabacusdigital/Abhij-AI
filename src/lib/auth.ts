@@ -69,12 +69,12 @@ export function setCurrentUser(user: User | null) {
 }
 
 /**
- * Register a new user account
+ * Register a new user account (Neon DB with localStorage fallback)
  */
-export function registerUser(
+export async function registerUser(
   usernameInput: string,
   passwordInput: string
-): { success: boolean; user?: User; error?: string } {
+): Promise<{ success: boolean; user?: User; error?: string }> {
   const username = usernameInput.trim().toLowerCase();
   const password = passwordInput.trim();
 
@@ -88,6 +88,27 @@ export function registerUser(
     return { success: false, error: 'Password must be at least 4 characters long.' };
   }
 
+  // Try Neon DB API first
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const data = await res.json();
+    if (data.dbConfigured) {
+      if (res.ok && data.success) {
+        setCurrentUser(data.user);
+        return { success: true, user: data.user };
+      }
+      return { success: false, error: data.error || 'Registration failed' };
+    }
+  } catch (err) {
+    console.warn('Network or DB error during register, falling back to local:', err);
+  }
+
+  // Local storage fallback
   const accounts = getStoredAccounts();
   if (accounts[username]) {
     return { success: false, error: `Username "${username}" is already taken.` };
@@ -107,12 +128,12 @@ export function registerUser(
 }
 
 /**
- * Log in an existing user
+ * Log in an existing user (Neon DB with localStorage fallback)
  */
-export function loginUser(
+export async function loginUser(
   usernameInput: string,
   passwordInput: string
-): { success: boolean; user?: User; error?: string } {
+): Promise<{ success: boolean; user?: User; error?: string }> {
   const username = usernameInput.trim().toLowerCase();
   const password = passwordInput.trim();
 
@@ -120,6 +141,27 @@ export function loginUser(
     return { success: false, error: 'Please enter both username and password.' };
   }
 
+  // Try Neon DB API first
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const data = await res.json();
+    if (data.dbConfigured) {
+      if (res.ok && data.success) {
+        setCurrentUser(data.user);
+        return { success: true, user: data.user };
+      }
+      return { success: false, error: data.error || 'Login failed' };
+    }
+  } catch (err) {
+    console.warn('Network or DB error during login, falling back to local:', err);
+  }
+
+  // Local storage fallback
   const accounts = getStoredAccounts();
   const account = accounts[username];
 

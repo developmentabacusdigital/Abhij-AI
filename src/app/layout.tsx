@@ -17,9 +17,36 @@ const pixelFont = Press_Start_2P({
 });
 
 export const metadata: Metadata = {
-  title: 'Abhij-AI | Markdown Knowledge Base Chatbot',
-  description: 'Grounded AI Chatbot powered by OpenRouter Gemma and local Markdown knowledge base documents.',
-  keywords: ['chatbot', 'markdown', 'knowledge base', 'RAG', 'openrouter', 'gemma', 'ai assistant'],
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
+  title: 'Abhij-AI | Humanized Knowledge Assistant',
+  description: 'AI Knowledge Assistant strictly grounded in Markdown and Word documentation with real-time interactive video avatar.',
+  keywords: ['chatbot', 'markdown', 'knowledge base', 'RAG', 'openrouter', 'ai assistant', 'abhij-ai'],
+  openGraph: {
+    title: 'Abhij-AI | Humanized Knowledge Assistant',
+    description: 'AI Knowledge Assistant strictly grounded in Markdown and Word documentation with real-time interactive video avatar.',
+    url: '/',
+    siteName: 'Abhij-AI',
+    images: [
+      {
+        url: '/SOCIAL.png',
+        width: 1080,
+        height: 1080,
+        alt: 'Abhij-AI Social Preview',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Abhij-AI | Humanized Knowledge Assistant',
+    description: 'AI Knowledge Assistant strictly grounded in Markdown and Word documentation with real-time interactive video avatar.',
+    images: ['/SOCIAL.png'],
+  },
+  icons: {
+    icon: '/Abhij-AI.png',
+    apple: '/SOCIAL.png',
+  },
 };
 
 export const viewport: Viewport = {

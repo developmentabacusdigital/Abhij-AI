@@ -72,6 +72,21 @@ export default function AdminPage() {
     setIsLoading(true);
     setAuthError('');
     try {
+      const authRes = await fetch('/api/knowledge/auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': keyToVerify,
+        },
+        body: JSON.stringify({ passcode: keyToVerify }),
+      });
+
+      if (!authRes.ok) {
+        sessionStorage.removeItem('abhij_admin_key');
+        setIsAuthenticated(false);
+        return;
+      }
+
       const res = await fetch('/api/knowledge');
       if (res.ok) {
         const data = await res.json();
@@ -90,22 +105,38 @@ export default function AdminPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!passcode.trim()) {
+    const cleanKey = passcode.trim();
+    if (!cleanKey) {
       setAuthError('Please enter the admin passcode.');
       return;
     }
-    // Test key with a dummy delete or fetch
+
     setIsLoading(true);
     setAuthError('');
     try {
+      const authRes = await fetch('/api/knowledge/auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': cleanKey,
+        },
+        body: JSON.stringify({ passcode: cleanKey }),
+      });
+
+      const authData = await authRes.json();
+      if (!authRes.ok) {
+        setAuthError(authData.error || 'Invalid admin passcode. Please check ADMIN_PASSWORD in your environment.');
+        return;
+      }
+
       const res = await fetch('/api/knowledge');
       const data = await res.json();
       setDocuments(data.documents || []);
       setIsAuthenticated(true);
-      sessionStorage.setItem('abhij_admin_key', passcode.trim());
+      sessionStorage.setItem('abhij_admin_key', cleanKey);
       showToast('success', 'Admin session unlocked successfully');
     } catch (err) {
-      setAuthError('Authentication failed. Please check passcode.');
+      setAuthError('Authentication failed. Please check network connection.');
     } finally {
       setIsLoading(false);
     }
@@ -161,6 +192,12 @@ export default function AdminPage() {
 
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          sessionStorage.removeItem('abhij_admin_key');
+          setIsAuthenticated(false);
+          setAuthError('Unauthorized: Your admin passcode is invalid or has changed. Please re-enter the passcode.');
+          return;
+        }
         throw new Error(data.error || `HTTP ${res.status}`);
       }
 
@@ -208,6 +245,12 @@ export default function AdminPage() {
 
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          sessionStorage.removeItem('abhij_admin_key');
+          setIsAuthenticated(false);
+          setAuthError('Unauthorized: Your admin passcode is invalid or has changed. Please re-enter the passcode.');
+          return;
+        }
         throw new Error(data.error || `HTTP ${res.status}`);
       }
 
@@ -241,6 +284,12 @@ export default function AdminPage() {
 
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          sessionStorage.removeItem('abhij_admin_key');
+          setIsAuthenticated(false);
+          setAuthError('Unauthorized: Your admin passcode is invalid or has changed. Please re-enter the passcode.');
+          return;
+        }
         throw new Error(data.error || `HTTP ${res.status}`);
       }
 

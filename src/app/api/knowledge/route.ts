@@ -6,13 +6,14 @@ import {
   isSafeFilename,
 } from '@/lib/knowledge';
 
+import { checkAdminPasscode } from '@/lib/admin-auth';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 function verifyAdminAuth(req: NextRequest): boolean {
-  const expectedPassword = process.env.ADMIN_PASSWORD || 'admin123';
-  const providedKey = req.headers.get('x-admin-key') || req.nextUrl.searchParams.get('key');
-  return !!providedKey && providedKey === expectedPassword;
+  const providedKey = req.headers.get('x-admin-key') || req.nextUrl.searchParams.get('key') || '';
+  return checkAdminPasscode(providedKey);
 }
 
 export async function GET() {

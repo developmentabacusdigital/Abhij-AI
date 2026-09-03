@@ -2008,6 +2008,31 @@ button, input, textarea, select {
   text-align: center;
   padding: 2rem 1rem;
   line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sidebar-auth-prompt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  background-color: var(--accent-white);
+  color: var(--accent-black);
+  border: none;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.sidebar-auth-prompt-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
 }
 
 .history-group {

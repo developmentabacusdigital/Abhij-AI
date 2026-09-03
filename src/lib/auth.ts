@@ -26,17 +26,7 @@ function getStoredAccounts(): Record<string, StoredAccount> {
   if (typeof window === 'undefined') return {};
   try {
     const raw = localStorage.getItem(USERS_STORAGE_KEY);
-    if (!raw) {
-      // Initialize with default demo user
-      const initial: Record<string, StoredAccount> = {
-        abhijay: {
-          passwordHash: simpleHash('password123'),
-          createdAt: Date.now(),
-        },
-      };
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(initial));
-      return initial;
-    }
+    if (!raw) return {};
     return JSON.parse(raw);
   } catch {
     return {};
@@ -53,18 +43,13 @@ function saveStoredAccounts(accounts: Record<string, StoredAccount>) {
 }
 
 /**
- * Returns current logged-in user or null
+ * Returns current logged-in user or null (logged out by default)
  */
 export function getCurrentUser(): User | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(SESSION_USER_KEY);
-    if (!raw) {
-      // Default to guest/demo user for first visit
-      const defaultUser: User = { username: 'abhijay', createdAt: Date.now() };
-      localStorage.setItem(SESSION_USER_KEY, JSON.stringify(defaultUser));
-      return defaultUser;
-    }
+    if (!raw) return null;
     return JSON.parse(raw);
   } catch {
     return null;

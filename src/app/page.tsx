@@ -536,7 +536,18 @@ export default function Home() {
         <div className="sidebar-content">
           {sidebarTab === 'chats' ? (
             <div className="chat-history-container">
-              {sessions.length === 0 ? (
+              {!currentUser ? (
+                <div className="empty-history-text">
+                  <p>Sign in to save and access your chat history across sessions.</p>
+                  <button
+                    className="sidebar-auth-prompt-btn"
+                    onClick={() => setShowAuthModal(true)}
+                  >
+                    <LogIn size={13} />
+                    <span>Sign In / Register</span>
+                  </button>
+                </div>
+              ) : sessions.length === 0 ? (
                 <div className="empty-history-text">
                   No conversation history yet. Start a new chat!
                 </div>

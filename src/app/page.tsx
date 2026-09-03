@@ -897,35 +897,55 @@ export default function Home() {
                               <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={{
-                                  img: ({ node, ...props }) => (
-                                    <span
-                                      className="doc-image-wrapper"
-                                      onClick={() =>
-                                        setLightboxImage({
-                                          src: (props.src as string) || '',
-                                          alt: (props.alt as string) || '',
-                                        })
-                                      }
-                                      role="button"
-                                      tabIndex={0}
-                                      title="Click to zoom image"
-                                    >
-                                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                                      <img
-                                        src={props.src}
-                                        alt={props.alt || 'Document visual'}
-                                        className="doc-rendered-img"
-                                        loading="lazy"
-                                      />
-                                      <span className="doc-image-overlay">
-                                        <ZoomIn size={14} />
-                                        <span>Click to enlarge</span>
+                                  img: ({ node, ...props }) => {
+                                    const rawSrc = (props.src as string) || '';
+                                    const altText = (props.alt as string) || 'Document visual';
+
+                                    // Auto-normalize relative paths, figure references, or alt-based references
+                                    let resolvedSrc = rawSrc;
+                                    if (resolvedSrc && !resolvedSrc.startsWith('http') && !resolvedSrc.startsWith('/api/knowledge/media')) {
+                                      resolvedSrc = `/api/knowledge/media?file=${encodeURIComponent(resolvedSrc)}`;
+                                    } else if (!resolvedSrc && altText) {
+                                      resolvedSrc = `/api/knowledge/media?file=${encodeURIComponent(altText)}`;
+                                    }
+
+                                    return (
+                                      <span
+                                        className="doc-image-wrapper"
+                                        onClick={() =>
+                                          setLightboxImage({
+                                            src: resolvedSrc,
+                                            alt: altText,
+                                          })
+                                        }
+                                        role="button"
+                                        tabIndex={0}
+                                        title="Click to zoom image"
+                                      >
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                          src={resolvedSrc}
+                                          alt={altText}
+                                          className="doc-rendered-img"
+                                          loading="lazy"
+                                          onError={e => {
+                                            const target = e.currentTarget;
+                                            if (altText && !target.dataset.triedAlt) {
+                                              target.dataset.triedAlt = 'true';
+                                              target.src = `/api/knowledge/media?file=${encodeURIComponent(altText)}`;
+                                            }
+                                          }}
+                                        />
+                                        <span className="doc-image-overlay">
+                                          <ZoomIn size={14} />
+                                          <span>Click to enlarge</span>
+                                        </span>
+                                        {altText && (
+                                          <span className="doc-image-caption">{altText}</span>
+                                        )}
                                       </span>
-                                      {props.alt && (
-                                        <span className="doc-image-caption">{props.alt}</span>
-                                      )}
-                                    </span>
-                                  ),
+                                    );
+                                  },
                                 }}
                               >
                                 {markdownBody}

@@ -130,9 +130,26 @@ export default function Home() {
   const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDoc[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<KnowledgeDoc | null>(null);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
-  
+
+  // Avatar Video State (idle, thinking, answering)
+  const [avatarState, setAvatarState] = useState<'idle' | 'thinking' | 'answering'>('idle');
+  const idleVideoRef = useRef<HTMLVideoElement>(null);
+  const thinkingVideoRef = useRef<HTMLVideoElement>(null);
+  const answeringVideoRef = useRef<HTMLVideoElement>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Sync avatar video playback with avatarState
+  useEffect(() => {
+    if (avatarState === 'idle') {
+      idleVideoRef.current?.play().catch(() => {});
+    } else if (avatarState === 'thinking') {
+      thinkingVideoRef.current?.play().catch(() => {});
+    } else if (avatarState === 'answering') {
+      answeringVideoRef.current?.play().catch(() => {});
+    }
+  }, [avatarState]);
 
   // Initialize auth and sessions on mount
   useEffect(() => {
@@ -338,6 +355,7 @@ export default function Home() {
       textareaRef.current.style.height = 'auto';
     }
     setIsLoading(true);
+    setAvatarState('thinking');
 
     try {
       const response = await fetch('/api/chat', {
@@ -388,6 +406,9 @@ export default function Home() {
               try {
                 const parsed = JSON.parse(dataStr);
                 const delta = parsed.choices?.[0]?.delta?.content || '';
+                if (delta) {
+                  setAvatarState('answering');
+                }
                 accumulatedText += delta;
 
                 setMessages(prev =>
@@ -449,6 +470,7 @@ export default function Home() {
       );
     } finally {
       setIsLoading(false);
+      setAvatarState('idle');
     }
   };
 
@@ -746,21 +768,6 @@ export default function Home() {
             <Settings size={14} />
             <span>Manage Knowledge (Admin)</span>
           </Link>
-
-          <div className="config-badge-group">
-            <span className="config-badge" title="Active Model">
-              <Cpu size={12} />
-              Gemma 3 12B
-            </span>
-            <span className="config-badge" title="Strict Grounding Temperature">
-              <Thermometer size={12} />
-              Temp: 0.2
-            </span>
-            <span className="config-badge" title="Factual alignment">
-              <ShieldCheck size={12} />
-              Grounded
-            </span>
-          </div>
         </div>
       </aside>
 
@@ -782,7 +789,7 @@ export default function Home() {
               </h2>
               <div className="header-status-indicator">
                 <span className="status-dot" />
-                <span>OpenRouter Gemma · Humanized Knowledge Assistant</span>
+                <span>Humanized Knowledge Assistant</span>
               </div>
             </div>
           </div>
@@ -1147,6 +1154,53 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Interactive Round Video Avatar Frame in Bottom-Right Corner */}
+      <div className={`avatar-frame-container ${avatarState}`} title={`Abhij-AI (${avatarState})`}>
+        <div className="avatar-frame-inner">
+          {/* Idle Video */}
+          <video
+            ref={idleVideoRef}
+            src="/videos/Idle.mp4"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="auto"
+            className={`avatar-video ${avatarState === 'idle' ? 'active' : ''}`}
+          />
+          {/* Thinking Video */}
+          <video
+            ref={thinkingVideoRef}
+            src="/videos/Thinking.mp4"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="auto"
+            className={`avatar-video ${avatarState === 'thinking' ? 'active' : ''}`}
+          />
+          {/* Answering Video */}
+          <video
+            ref={answeringVideoRef}
+            src="/videos/Answering.mp4"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="auto"
+            className={`avatar-video ${avatarState === 'answering' ? 'active' : ''}`}
+          />
+        </div>
+        <div className="avatar-status-pill">
+          <span className={`status-dot-pulse ${avatarState}`} />
+          <span className="status-text">
+            {avatarState === 'idle' && 'Idle'}
+            {avatarState === 'thinking' && 'Thinking...'}
+            {avatarState === 'answering' && 'Answering...'}
+          </span>
+        </div>
+      </div>
 
       {/* IMAGE LIGHTBOX MODAL */}
       {lightboxImage && (

@@ -109,6 +109,7 @@ button, input, textarea, select {
 .app-container {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
   background-color: var(--bg-primary);
@@ -1022,8 +1023,13 @@ button, input, textarea, select {
     top: 0;
     bottom: 0;
     left: 0;
+    width: min(300px, 85vw);
     transform: translateX(-100%);
-    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.8);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.85);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 50;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .sidebar.open,
@@ -1042,37 +1048,217 @@ button, input, textarea, select {
     display: block;
     position: fixed;
     inset: 0;
-    background-color: rgba(0, 0, 0, 0.6);
-    z-index: 35;
+    background-color: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 45;
   }
 
   .chat-header {
-    padding: 0 1rem;
+    height: 52px;
+    padding: 0 0.85rem;
+  }
+
+  .header-left {
+    gap: 0.6rem;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .header-title-wrapper {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .header-title-wrapper h2 {
+    font-size: 0.86rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .header-status-indicator {
+    display: none;
+  }
+
+  .header-admin-pill {
+    display: none;
+  }
+
+  .header-actions {
+    gap: 0.35rem;
+    flex-shrink: 0;
+  }
+
+  .header-new-chat-btn {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.74rem;
   }
 
   .messages-container {
-    padding: 1rem;
+    padding: 0.75rem 0.75rem 95px 0.75rem;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
-  .welcome-hero h2 {
-    font-size: 1.35rem;
+  .messages-list {
+    padding: 0.5rem 0;
+    gap: 1.15rem;
   }
 
-  .welcome-hero p {
-    font-size: 0.85rem;
+  .message-wrapper.user-align {
+    max-width: 88%;
+    gap: 0.5rem;
   }
 
-  .suggestions-grid {
-    grid-template-columns: 1fr;
+  .message-wrapper.assistant-align {
+    max-width: 94%;
+    gap: 0.5rem;
   }
 
-  .input-dock {
-    padding: 0.75rem 1rem env(safe-area-inset-bottom, 0.75rem);
+  .message-avatar {
+    width: 26px;
+    height: 26px;
+    font-size: 0.7rem;
+    border-radius: 6px;
   }
 
   .message-bubble {
     font-size: 0.88rem;
+    padding: 0.75rem 0.95rem;
+    line-height: 1.55;
+  }
+
+  .welcome-hero {
+    padding: 1.5rem 0.5rem;
+  }
+
+  .welcome-hero h2 {
+    font-size: 1.3rem;
+  }
+
+  .welcome-hero p {
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+
+  .suggestions-grid {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+  .suggestion-card {
+    padding: 0.75rem 0.9rem;
+    border-radius: 10px;
+  }
+
+  .suggestion-card:active {
+    transform: scale(0.98);
+    background-color: var(--bg-surface-hover);
+  }
+
+  .input-dock {
+    padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom, 0px)) 0.75rem;
+  }
+
+  .input-box,
+  .input-bar {
+    padding: 0.45rem 0.65rem;
+    border-radius: 12px;
+  }
+
+  /* Critical: 16px font-size prevents iOS Safari auto-zoom on input focus */
+  .chat-textarea {
+    font-size: 16px !important;
+    min-height: 24px;
+    max-height: 100px;
+    padding: 0.25rem 0.4rem;
+    line-height: 1.4;
+  }
+
+  .send-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+  }
+
+  .send-btn:active:not(:disabled) {
+    transform: scale(0.92);
+  }
+
+  .input-hint,
+  .input-caption {
+    display: none;
+  }
+
+  /* Compact round video avatar on mobile */
+  .avatar-frame-container {
+    bottom: 74px;
+    right: 12px;
+    z-index: 35;
+  }
+
+  .avatar-frame-inner {
+    width: 60px;
+    height: 60px;
+    border-width: 2px;
+  }
+
+  .avatar-status-pill {
+    padding: 0.1rem 0.35rem;
+    gap: 0.25rem;
+  }
+
+  .avatar-status-pill .status-text {
+    font-size: 0.54rem;
+  }
+
+  .status-dot-pulse {
+    width: 5px;
+    height: 5px;
+  }
+
+  /* Touch accessibility: show action buttons in chat history on mobile */
+  .history-item-actions {
+    display: flex;
+    opacity: 0.75;
+  }
+
+  .history-item:active {
+    background-color: var(--bg-surface);
+  }
+
+  .followup-chip:active {
+    transform: scale(0.98);
+  }
+
+  /* Mobile Modals */
+  .modal-overlay {
+    padding: 0.75rem;
+  }
+
+  .modal-content {
+    max-height: 90vh;
+    border-radius: 12px;
+    width: 100%;
+  }
+
+  .modal-header {
     padding: 0.85rem 1rem;
+  }
+
+  .modal-body {
+    padding: 1rem;
+  }
+
+  .auth-modal-content {
+    width: 100%;
+    max-width: 360px;
+  }
+
+  .auth-input {
+    font-size: 16px !important; /* Prevents iOS Safari zoom */
   }
 }
 

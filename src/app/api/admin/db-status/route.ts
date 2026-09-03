@@ -29,10 +29,11 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const [userCountRes, sessionCountRes, messageCountRes] = await Promise.all([
+    const [userCountRes, sessionCountRes, messageCountRes, docCountRes] = await Promise.all([
       sql`SELECT COUNT(*)::int as count FROM users;`,
       sql`SELECT COUNT(*)::int as count FROM chat_sessions;`,
       sql`SELECT COUNT(*)::int as count FROM chat_messages;`,
+      sql`SELECT COUNT(*)::int as count FROM knowledge_documents;`,
     ]);
 
     return NextResponse.json({
@@ -43,6 +44,7 @@ export async function GET(req: NextRequest) {
         users: userCountRes[0]?.count || 0,
         sessions: sessionCountRes[0]?.count || 0,
         messages: messageCountRes[0]?.count || 0,
+        documents: docCountRes[0]?.count || 0,
       },
     });
   } catch (err: any) {

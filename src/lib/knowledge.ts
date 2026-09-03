@@ -4,6 +4,7 @@ import os from 'os';
 import matter from 'gray-matter';
 import mammoth from 'mammoth';
 import WordExtractor from 'word-extractor';
+import { ensureDbReady, isDbConfigured } from '@/lib/db';
 
 export interface DocumentSection {
   id: string;
@@ -184,7 +185,35 @@ export function isSafeFilename(filename: string): boolean {
 }
 
 /**
- * Save or update a knowledge document
+ * Synchronize local knowledge files to Neon DB (auto-seeds on empty DB)
+ */
+async function syncLocalFilesToDb(sql: any): Promise<void> {
+  try {
+    ensureKnowledgeDir();
+    const localFiles = fs.existsSync(KNOWLEDGE_DIR) ? fs.readdirSync(KNOWLEDGE_DIR) : [];
+    const validFiles = localFiles.filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return SUPPORTED_EXTENSIONS.includes(ext) && !file.startsWith('.');
+    });
+
+    for (const filename of validFiles) {
+      const fullPath = path.join(KNOWLEDGE_DIR, filename);
+      const stat = fs.statSync(fullPath);
+      const { title, content, filetype } = await parseFileContent(filename, fullPath);
+
+      await sql`
+        INSERT INTO knowledge_documents (filename, filetype, title, content, size, updated_at)
+        VALUES (${filename}, ${filetype}, ${title}, ${content}, ${stat.size}, NOW())
+        ON CONFLICT (filename) DO NOTHING;
+      `;
+    }
+  } catch (err) {
+    console.error('Error syncing local files to Neon DB:', err);
+  }
+}
+
+/**
+ * Save or update a knowledge document (disk + Neon DB)
  */
 export async function saveKnowledgeDocument(
   filename: string,
@@ -196,10 +225,11 @@ export async function saveKnowledgeDocument(
   }
 
   const targetPath = path.join(KNOWLEDGE_DIR, filename);
+  let diskSuccess = false;
 
   try {
     fs.writeFileSync(targetPath, content);
-    return { success: true };
+    diskSuccess = true;
   } catch (err: any) {
     console.warn(`Could not write to ${targetPath}, attempting tmpdir fallback:`, err.message);
     try {
@@ -208,15 +238,66 @@ export async function saveKnowledgeDocument(
         fs.mkdirSync(tmpKnowledge, { recursive: true });
       }
       fs.writeFileSync(path.join(tmpKnowledge, filename), content);
-      return { success: true };
+      diskSuccess = true;
     } catch (tmpErr: any) {
-      return { success: false, error: err.message || 'Failed to save document' };
+      console.warn('Could not write to tmpdir either:', tmpErr.message);
     }
   }
+
+  // Also sync to Neon DB if configured
+  if (isDbConfigured()) {
+    try {
+      const sql = await ensureDbReady();
+      if (sql) {
+        const ext = path.extname(filename).toLowerCase();
+        let filetype: 'md' | 'docx' | 'doc' | 'txt' = 'md';
+        if (ext === '.docx') filetype = 'docx';
+        else if (ext === '.doc') filetype = 'doc';
+        else if (ext === '.txt') filetype = 'txt';
+
+        let title = path.basename(filename, ext);
+        let parsedContent = '';
+
+        if (filetype === 'docx' || filetype === 'doc') {
+          // If binary buffer, parse it to extract markdown text for database indexing
+          const fullTempPath = fs.existsSync(targetPath)
+            ? targetPath
+            : path.join(os.tmpdir(), 'knowledge', filename);
+          if (fs.existsSync(fullTempPath)) {
+            const parsed = await parseFileContent(filename, fullTempPath);
+            title = parsed.title;
+            parsedContent = parsed.content;
+          }
+        } else {
+          parsedContent = typeof content === 'string' ? content : content.toString('utf-8');
+          const h1Match = parsedContent.match(/^#\s+(.+)$/m);
+          if (h1Match) title = h1Match[1].trim();
+        }
+
+        const byteSize = Buffer.isBuffer(content) ? content.length : Buffer.byteLength(content, 'utf-8');
+
+        await sql`
+          INSERT INTO knowledge_documents (filename, filetype, title, content, size, updated_at)
+          VALUES (${filename}, ${filetype}, ${title}, ${parsedContent}, ${byteSize}, NOW())
+          ON CONFLICT (filename) DO UPDATE SET
+            title = EXCLUDED.title,
+            content = EXCLUDED.content,
+            size = EXCLUDED.size,
+            updated_at = NOW();
+        `;
+        return { success: true };
+      }
+    } catch (dbErr: any) {
+      console.warn('Neon DB save error in saveKnowledgeDocument:', dbErr.message);
+    }
+  }
+
+  if (diskSuccess) return { success: true };
+  return { success: false, error: 'Failed to save document' };
 }
 
 /**
- * Delete a knowledge document
+ * Delete a knowledge document (disk + Neon DB)
  */
 export async function deleteKnowledgeDocument(
   filename: string
@@ -263,6 +344,21 @@ export async function deleteKnowledgeDocument(
     } catch {}
   }
 
+  // Also delete from Neon DB if configured
+  if (isDbConfigured()) {
+    try {
+      const sql = await ensureDbReady();
+      if (sql) {
+        await sql`
+          DELETE FROM knowledge_documents WHERE filename = ${filename};
+        `;
+        deleted = true;
+      }
+    } catch (dbErr: any) {
+      console.warn('Neon DB delete error:', dbErr.message);
+    }
+  }
+
   if (!deleted) {
     return { success: false, error: 'File does not exist or could not be removed' };
   }
@@ -271,9 +367,50 @@ export async function deleteKnowledgeDocument(
 }
 
 /**
- * Get all supported files in the knowledge directory (.md, .docx, .doc, .txt)
+ * Get all supported files in the knowledge base (Neon DB or local filesystem)
  */
 export async function getAllKnowledgeDocuments(): Promise<KnowledgeDocument[]> {
+  // If Neon DB is configured, retrieve from Neon DB
+  if (isDbConfigured()) {
+    try {
+      const sql = await ensureDbReady();
+      if (sql) {
+        let rows = await sql`
+          SELECT filename, filetype, title, content, size
+          FROM knowledge_documents
+          ORDER BY updated_at DESC;
+        `;
+
+        // If table is empty on first query, auto-seed from local files
+        if (rows.length === 0) {
+          await syncLocalFilesToDb(sql);
+          rows = await sql`
+            SELECT filename, filetype, title, content, size
+            FROM knowledge_documents
+            ORDER BY updated_at DESC;
+          `;
+        }
+
+        if (rows.length > 0) {
+          return rows.map((r: any) => {
+            const sections = r.content.split(/^#{1,3}\s+/m).filter(Boolean);
+            return {
+              filename: r.filename,
+              filetype: r.filetype as 'md' | 'docx' | 'doc' | 'txt',
+              title: r.title,
+              content: r.content,
+              size: Number(r.size),
+              sectionsCount: Math.max(1, sections.length),
+            };
+          });
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Neon DB query error in getAllKnowledgeDocuments, falling back to disk:', dbErr);
+    }
+  }
+
+  // Fallback: Read from local filesystem & OS tmpdir
   ensureKnowledgeDir();
   try {
     const localFiles = fs.existsSync(KNOWLEDGE_DIR) ? fs.readdirSync(KNOWLEDGE_DIR) : [];

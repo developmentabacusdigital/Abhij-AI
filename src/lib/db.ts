@@ -80,6 +80,19 @@ export async function initDatabaseSchema(): Promise<{ success: boolean; error?: 
       CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at ASC);
     `;
 
+    // 6. Knowledge Documents Table
+    await sql`
+      CREATE TABLE IF NOT EXISTS knowledge_documents (
+        filename VARCHAR(255) PRIMARY KEY,
+        filetype VARCHAR(16) NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        size INT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `;
+
     schemaInitialized = true;
     return { success: true };
   } catch (err: any) {

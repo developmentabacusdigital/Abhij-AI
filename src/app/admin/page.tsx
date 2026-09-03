@@ -73,7 +73,7 @@ export default function AdminPage() {
     configured: boolean;
     connected?: boolean;
     driver?: string;
-    stats?: { users: number; sessions: number; messages: number };
+    stats?: { users: number; sessions: number; messages: number; documents?: number };
   } | null>(null);
 
   const fetchDbStatus = async (key: string) => {
@@ -489,7 +489,7 @@ export default function AdminPage() {
               </div>
               <div className="stat-label">
                 {dbStatus?.connected
-                  ? `${dbStatus.stats?.users || 0} users · ${dbStatus.stats?.sessions || 0} chats`
+                  ? `${dbStatus.stats?.documents ?? documents.length} docs · ${dbStatus.stats?.users || 0} users`
                   : 'Database Engine'}
               </div>
             </div>

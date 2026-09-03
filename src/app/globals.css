@@ -755,6 +755,7 @@ button, input, textarea, select {
   border-top: 1px solid var(--border-subtle);
   position: relative;
   z-index: 20;
+  width: 100%;
 }
 
 .input-wrapper {
@@ -763,21 +764,27 @@ button, input, textarea, select {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  width: 100%;
 }
 
-.input-box {
+.input-box,
+.input-bar {
   display: flex;
   align-items: flex-end;
   background-color: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-medium);
   border-radius: 12px;
   padding: 0.5rem 0.75rem;
+  gap: 0.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
 }
 
-.input-box:focus-within {
-  border-color: var(--border-strong);
-  box-shadow: 0 0 0 1px var(--border-strong);
+.input-box:focus-within,
+.input-bar:focus-within {
+  border-color: var(--accent-white);
+  box-shadow: 0 0 0 1px var(--accent-white);
 }
 
 .chat-textarea {
@@ -790,8 +797,9 @@ button, input, textarea, select {
   line-height: 1.5;
   resize: none;
   max-height: 160px;
-  min-height: 24px;
+  min-height: 26px;
   padding: 0.35rem 0.5rem;
+  font-family: inherit;
 }
 
 .chat-textarea::placeholder {
@@ -811,12 +819,14 @@ button, input, textarea, select {
   justify-content: center;
   transition: all 0.15s ease;
   flex-shrink: 0;
+  margin-bottom: 2px;
 }
 
 .send-btn:disabled {
-  background-color: var(--bg-surface-active);
-  color: var(--text-subtle);
+  background-color: var(--bg-tertiary);
+  color: var(--text-muted);
   cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .send-btn:not(:disabled):hover {
@@ -824,10 +834,18 @@ button, input, textarea, select {
   opacity: 0.92;
 }
 
-.input-hint {
-  font-size: 0.7rem;
+.input-hint,
+.input-caption {
+  font-size: 0.72rem;
   color: var(--text-muted);
   text-align: center;
+  line-height: 1.4;
+}
+
+/* Desktop: hide mobile trigger buttons */
+.mobile-menu-btn,
+.mobile-close-btn {
+  display: none;
 }
 
 /* Document Viewer Modal */
@@ -917,8 +935,16 @@ button, input, textarea, select {
     box-shadow: 10px 0 30px rgba(0, 0, 0, 0.8);
   }
 
-  .sidebar.open {
+  .sidebar.open,
+  .sidebar.mobile-open {
     transform: translateX(0);
+  }
+
+  .mobile-menu-btn,
+  .mobile-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .mobile-sidebar-backdrop {

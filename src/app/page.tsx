@@ -974,31 +974,33 @@ export default function Home() {
 
         {/* Input Dock */}
         <div className="input-dock">
-          <div className="input-bar">
-            <textarea
-              ref={textareaRef}
-              className="chat-textarea"
-              placeholder={
-                currentUser
-                  ? `Message Abhij-AI (${currentUser.username})...`
-                  : 'Message Abhij-AI...'
-              }
-              value={input}
-              onChange={handleTextareaInput}
-              onKeyDown={handleKeyDown}
-              rows={1}
-            />
-            <button
-              className="send-btn"
-              onClick={() => handleSubmit()}
-              disabled={!input.trim() || isLoading}
-              aria-label="Send message"
-            >
-              <Send size={16} />
-            </button>
-          </div>
-          <div className="input-caption">
-            Abhij-AI is strictly grounded in Markdown and Word knowledge base documents. Press Enter to send, Shift+Enter for new line.
+          <div className="input-wrapper">
+            <div className="input-box">
+              <textarea
+                ref={textareaRef}
+                className="chat-textarea"
+                placeholder={
+                  currentUser
+                    ? `Message Abhij-AI (${currentUser.username})...`
+                    : 'Message Abhij-AI...'
+                }
+                value={input}
+                onChange={handleTextareaInput}
+                onKeyDown={handleKeyDown}
+                rows={1}
+              />
+              <button
+                className="send-btn"
+                onClick={() => handleSubmit()}
+                disabled={!input.trim() || isLoading}
+                aria-label="Send message"
+              >
+                <Send size={16} />
+              </button>
+            </div>
+            <div className="input-hint">
+              Abhij-AI is strictly grounded in Markdown and Word knowledge base documents. Press Enter to send, Shift+Enter for new line.
+            </div>
           </div>
         </div>
       </main>

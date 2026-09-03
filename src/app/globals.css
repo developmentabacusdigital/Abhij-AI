@@ -140,6 +140,57 @@ button, input, textarea, select {
   gap: 0.75rem;
 }
 
+.brand-logo-img {
+  height: 38px;
+  width: auto;
+  max-width: 170px;
+  object-fit: contain;
+  display: block;
+  mix-blend-mode: screen;
+}
+
+.auth-modal-logo-img {
+  height: 36px;
+  width: auto;
+  max-width: 160px;
+  object-fit: contain;
+  display: block;
+  mix-blend-mode: screen;
+}
+
+.admin-gate-logo-img {
+  height: 52px;
+  width: auto;
+  max-width: 220px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  mix-blend-mode: screen;
+}
+
+.admin-nav-logo-img {
+  height: 32px;
+  width: auto;
+  max-width: 150px;
+  object-fit: contain;
+  display: block;
+  mix-blend-mode: screen;
+}
+
+.admin-nav-subtitle {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+[data-theme='light'] .brand-logo-img,
+[data-theme='light'] .auth-modal-logo-img,
+[data-theme='light'] .admin-gate-logo-img,
+[data-theme='light'] .admin-nav-logo-img {
+  filter: invert(1);
+  mix-blend-mode: multiply;
+}
+
 .logo-mark {
   width: 34px;
   height: 34px;

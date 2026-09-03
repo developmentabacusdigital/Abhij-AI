@@ -284,11 +284,8 @@ export default function AdminPage() {
       <div className="admin-gate-wrapper">
         <div className="admin-gate-card">
           <div className="gate-header">
-            <div className="logo-mark">A</div>
-            <div className="gate-title-group">
-              <h1 className="pixel-font">Abhij-AI</h1>
-              <span>Admin Knowledge Gate</span>
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/Abhij-AI.png" alt="Abhij-AI Logo" className="admin-gate-logo-img" />
           </div>
 
           <p className="gate-desc">
@@ -336,11 +333,9 @@ export default function AdminPage() {
       {/* Admin Top Navigation */}
       <header className="admin-header">
         <div className="admin-brand">
-          <div className="logo-mark">A</div>
-          <div className="admin-brand-text">
-            <h1 className="pixel-font">Abhij-AI</h1>
-            <span>Knowledge Base Manager</span>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/Abhij-AI.png" alt="Abhij-AI Logo" className="admin-nav-logo-img" />
+          <span className="admin-nav-subtitle">Knowledge Base Manager</span>
         </div>
 
         <div className="admin-nav-actions">

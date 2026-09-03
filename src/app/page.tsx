@@ -490,11 +490,12 @@ export default function Home() {
       <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-header">
           <div className="logo-group">
-            <div className="logo-mark">A</div>
-            <div className="logo-text">
-              <h1 className="pixel-font">Abhij-AI</h1>
-              <span>Knowledge Assistant</span>
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/Abhij-AI.png"
+              alt="Abhij-AI"
+              className="brand-logo-img"
+            />
           </div>
           <button
             className="icon-btn mobile-close-btn"
@@ -1077,11 +1078,12 @@ export default function Home() {
           <div className="modal-content auth-modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div className="auth-modal-title-group">
-                <div className="logo-mark">A</div>
-                <div>
-                  <h3 className="pixel-font">Abhij-AI</h3>
-                  <span className="auth-modal-subtitle">User Authentication</span>
-                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/Abhij-AI.png"
+                  alt="Abhij-AI"
+                  className="auth-modal-logo-img"
+                />
               </div>
               <button
                 className="icon-btn"

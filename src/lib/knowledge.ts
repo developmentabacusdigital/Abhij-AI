@@ -394,6 +394,28 @@ function tokenize(text: string): string[] {
     .filter(token => token.length > 2 && !STOP_WORDS.has(token));
 }
 
+const GREETINGS_AND_PLEASANTRIES = new Set([
+  'hi', 'hello', 'hey', 'heya', 'howdy', 'hola', 'yo', 'sup',
+  'good morning', 'good afternoon', 'good evening', 'good day',
+  'how are you', 'how are you doing', 'how r u', 'hows it going', "how's it going",
+  'who are you', 'what are you', 'what can you do', 'tell me about yourself',
+  'thanks', 'thank you', 'thx', 'bye', 'goodbye', 'see ya', 'see you', 'help'
+]);
+
+/**
+ * Checks if a query is a general greeting or conversational pleasantry
+ */
+export function isConversationalQuery(query: string): boolean {
+  if (!query) return true;
+  const clean = query.trim().toLowerCase().replace(/[!?.,;:]/g, '');
+  if (!clean) return true;
+  if (GREETINGS_AND_PLEASANTRIES.has(clean)) return true;
+  if (/^(hi|hello|hey|greetings|good\s+(morning|afternoon|evening))\b/i.test(clean) && clean.split(/\s+/).length <= 4) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Search and retrieve the most relevant sections for a user query
  */
@@ -401,7 +423,17 @@ export async function searchRelevantKnowledge(query: string, maxResults: number 
   sections: DocumentSection[];
   usedFilenames: string[];
   contextString: string;
+  isGreeting: boolean;
 }> {
+  if (isConversationalQuery(query)) {
+    return {
+      sections: [],
+      usedFilenames: [],
+      contextString: '',
+      isGreeting: true,
+    };
+  }
+
   const queryTokens = tokenize(query);
   const sections = await getAllDocumentSections();
 
@@ -410,15 +442,16 @@ export async function searchRelevantKnowledge(query: string, maxResults: number 
       sections: [],
       usedFilenames: [],
       contextString: 'No knowledge base documents currently available.',
+      isGreeting: false,
     };
   }
 
   if (queryTokens.length === 0) {
-    const topSections = sections.slice(0, maxResults);
     return {
-      sections: topSections,
-      usedFilenames: Array.from(new Set(topSections.map(s => s.filename))),
-      contextString: formatContext(topSections),
+      sections: [],
+      usedFilenames: [],
+      contextString: '',
+      isGreeting: false,
     };
   }
 
@@ -451,16 +484,23 @@ export async function searchRelevantKnowledge(query: string, maxResults: number 
     .filter(item => item.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  const selectedSections = relevantScored.length > 0 
-    ? relevantScored.slice(0, maxResults).map(i => i.section)
-    : sections.slice(0, 2);
+  if (relevantScored.length === 0) {
+    return {
+      sections: [],
+      usedFilenames: [],
+      contextString: '',
+      isGreeting: false,
+    };
+  }
 
+  const selectedSections = relevantScored.slice(0, maxResults).map(i => i.section);
   const usedFilenames = Array.from(new Set(selectedSections.map(s => s.filename)));
 
   return {
     sections: selectedSections,
     usedFilenames,
     contextString: formatContext(selectedSections),
+    isGreeting: false,
   };
 }
 

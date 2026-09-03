@@ -21,13 +21,14 @@ export async function POST(req: NextRequest) {
     const query = latestUserMessage ? latestUserMessage.content : '';
 
     // Search knowledge base for relevant context
-    const { contextString, usedFilenames, sections } = await searchRelevantKnowledge(query);
+    const { contextString, usedFilenames, sections, isGreeting } = await searchRelevantKnowledge(query);
 
     // Call OpenRouter with streaming
     const openRouterResponse = await streamOpenRouterChat({
       messages: messages as ChatMessage[],
       context: contextString,
       sources: usedFilenames,
+      isGreeting,
     });
 
     // Create a transform stream to pass through SSE chunks and encode source metadata

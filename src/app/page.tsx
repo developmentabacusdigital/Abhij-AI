@@ -7,9 +7,11 @@ import remarkGfm from 'remark-gfm';
 import {
   Send,
   FileText,
-  BookOpen,
-  Sparkles,
+  MessageSquare,
+  Plus,
   Trash2,
+  Edit2,
+  Check,
   Moon,
   Sun,
   Menu,
@@ -22,15 +24,31 @@ import {
   Cpu,
   ArrowRight,
   ZoomIn,
-  Settings
+  Settings,
+  Sparkles,
+  User as UserIcon,
+  LogOut,
+  LogIn,
+  UserPlus
 } from 'lucide-react';
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  sources?: string[];
-}
+import {
+  User,
+  getCurrentUser,
+  loginUser,
+  registerUser,
+  logoutUser
+} from '@/lib/auth';
+import {
+  Message,
+  ChatSession,
+  getUserSessions,
+  saveUserSession,
+  createNewSession,
+  deleteUserSession,
+  updateSessionTitle,
+  generateChatTitle,
+  groupSessionsByDate
+} from '@/lib/chat-store';
 
 interface KnowledgeDoc {
   filename: string;
@@ -43,21 +61,21 @@ interface KnowledgeDoc {
 
 const STARTER_QUERIES = [
   {
-    query: "What is the refund policy for Pro subscriptions?",
-    context: "faq_and_policies.md",
+    query: "Hi, can you introduce yourself and tell me what you can do?",
+    context: "General Introduction",
+  },
+  {
+    query: "Can you explain the high-level system architecture?",
+    context: "HOW-IT-WORKS.md",
   },
   {
     query: "What are the key features and latency of VectorStream Engine?",
     context: "product_guide.md",
   },
   {
-    query: "Where are Apex Systems' office locations and what are their hours?",
+    query: "Where are Apex Systems' office locations and operating hours?",
     context: "company_overview.md",
   },
-  {
-    query: "How does the markdown knowledge base ground responses?",
-    context: "faq_and_policies.md",
-  }
 ];
 
 /**
@@ -69,17 +87,17 @@ function parseAssistantResponse(rawContent: string): {
 } {
   if (!rawContent) return { markdownBody: '', suggestedQuestions: [] };
 
-  const regex = /###?\s*(?:Suggested|Related|Recommended)\s*(?:Next\s*)?Questions[:\s]*([\s\S]*?)$/i;
-  const match = rawContent.match(regex);
+  const suggestedQuestionsHeader = /###\s+Suggested\s+Questions/i;
+  const match = rawContent.match(suggestedQuestionsHeader);
 
-  if (!match) {
+  if (!match || match.index === undefined) {
     return { markdownBody: rawContent, suggestedQuestions: [] };
   }
 
-  const suggestionsBlock = match[1];
-  const markdownBody = rawContent.replace(regex, '').trim();
+  const markdownBody = rawContent.slice(0, match.index).trim();
+  const rawSuggestions = rawContent.slice(match.index + match[0].length).trim();
 
-  const suggestedQuestions = suggestionsBlock
+  const suggestedQuestions = rawSuggestions
     .split('\n')
     .map(line => line.replace(/^[\s*\-–—\d.)\]>]+/, '').replace(/^\[|\]$/g, '').trim())
     .filter(line => line.length > 5 && line.length < 160 && !line.startsWith('#'));
@@ -88,7 +106,23 @@ function parseAssistantResponse(rawContent: string): {
 }
 
 export default function Home() {
+  // User Auth State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authTab, setAuthTab] = useState<'login' | 'register'>('login');
+  const [authUsername, setAuthUsername] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Chat Sessions State
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitleText, setEditingTitleText] = useState('');
+  const [sidebarTab, setSidebarTab] = useState<'chats' | 'docs'>('chats');
+
+  // Chat Input & Theme State
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -100,16 +134,40 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load theme preference and knowledge docs on mount
+  // Initialize auth and sessions on mount
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     fetchKnowledgeDocs();
+
+    const user = getCurrentUser();
+    setCurrentUser(user);
+
+    if (user) {
+      loadUserSessions(user.username);
+    }
   }, [theme]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
+
+  const loadUserSessions = (username: string) => {
+    const userSessions = getUserSessions(username);
+    setSessions(userSessions);
+
+    if (userSessions.length > 0) {
+      const active = userSessions[0];
+      setCurrentSessionId(active.id);
+      setMessages(active.messages || []);
+    } else {
+      // Create initial session
+      const freshSession = createNewSession(username);
+      setSessions([freshSession]);
+      setCurrentSessionId(freshSession.id);
+      setMessages([]);
+    }
+  };
 
   const fetchKnowledgeDocs = async () => {
     try {
@@ -128,6 +186,103 @@ export default function Home() {
     setTheme(nextTheme);
   };
 
+  // Auth Handlers
+  const handleAuthSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+
+    if (authTab === 'login') {
+      const res = loginUser(authUsername, authPassword);
+      if (!res.success || !res.user) {
+        setAuthError(res.error || 'Login failed');
+        return;
+      }
+      setCurrentUser(res.user);
+      setShowAuthModal(false);
+      setAuthUsername('');
+      setAuthPassword('');
+      loadUserSessions(res.user.username);
+    } else {
+      const res = registerUser(authUsername, authPassword);
+      if (!res.success || !res.user) {
+        setAuthError(res.error || 'Registration failed');
+        return;
+      }
+      setCurrentUser(res.user);
+      setShowAuthModal(false);
+      setAuthUsername('');
+      setAuthPassword('');
+      loadUserSessions(res.user.username);
+    }
+  };
+
+  const handleLogout = () => {
+    logoutUser();
+    setCurrentUser(null);
+    setSessions([]);
+    setCurrentSessionId('');
+    setMessages([]);
+    setShowAuthModal(true);
+  };
+
+  // Chat Session Handlers
+  const handleNewChat = () => {
+    if (!currentUser) {
+      setShowAuthModal(true);
+      return;
+    }
+    const fresh = createNewSession(currentUser.username);
+    setSessions(prev => [fresh, ...prev.filter(s => s.id !== fresh.id)]);
+    setCurrentSessionId(fresh.id);
+    setMessages([]);
+    setMobileMenuOpen(false);
+  };
+
+  const handleSelectSession = (session: ChatSession) => {
+    setCurrentSessionId(session.id);
+    setMessages(session.messages || []);
+    setMobileMenuOpen(false);
+  };
+
+  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentUser) return;
+
+    deleteUserSession(currentUser.username, sessionId);
+    const remaining = sessions.filter(s => s.id !== sessionId);
+    setSessions(remaining);
+
+    if (currentSessionId === sessionId) {
+      if (remaining.length > 0) {
+        setCurrentSessionId(remaining[0].id);
+        setMessages(remaining[0].messages || []);
+      } else {
+        const fresh = createNewSession(currentUser.username);
+        setSessions([fresh]);
+        setCurrentSessionId(fresh.id);
+        setMessages([]);
+      }
+    }
+  };
+
+  const handleStartRename = (session: ChatSession, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingSessionId(session.id);
+    setEditingTitleText(session.title);
+  };
+
+  const handleSaveRename = (sessionId: string, e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!currentUser) return;
+
+    const trimmed = editingTitleText.trim() || 'Untitled Chat';
+    updateSessionTitle(currentUser.username, sessionId, trimmed);
+    setSessions(prev =>
+      prev.map(s => (s.id === sessionId ? { ...s, title: trimmed } : s))
+    );
+    setEditingSessionId(null);
+  };
+
   const handleTextareaInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
     e.target.style.height = 'auto';
@@ -144,6 +299,22 @@ export default function Home() {
   const handleSubmit = async (overrideQuery?: string) => {
     const queryToSend = overrideQuery || input.trim();
     if (!queryToSend || isLoading) return;
+
+    if (!currentUser) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    // Ensure we have an active session
+    let activeSessionId = currentSessionId;
+    let currentSession = sessions.find(s => s.id === activeSessionId);
+    if (!currentSession) {
+      const fresh = createNewSession(currentUser.username);
+      activeSessionId = fresh.id;
+      currentSession = fresh;
+      setSessions(prev => [fresh, ...prev]);
+      setCurrentSessionId(fresh.id);
+    }
 
     const userMessageId = Date.now().toString();
     const newUserMessage: Message = {
@@ -227,12 +398,43 @@ export default function Home() {
                   )
                 );
               } catch (parseError) {
-                // non-JSON stream chunk or raw text
+                // non-JSON stream chunk
               }
             }
           }
         }
       }
+
+      // Finalize messages for current session
+      const finalAssistantMessage: Message = {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: accumulatedText,
+        sources,
+      };
+      const finalConversation = [...updatedMessages, finalAssistantMessage];
+
+      // Auto-title session if this is the first exchange
+      let sessionTitle = currentSession.title;
+      if (
+        sessionTitle === 'New Chat' ||
+        sessionTitle === 'New Conversation' ||
+        currentSession.messages.length === 0
+      ) {
+        sessionTitle = generateChatTitle(queryToSend, accumulatedText);
+      }
+
+      const updatedSession: ChatSession = {
+        ...currentSession,
+        title: sessionTitle,
+        messages: finalConversation,
+        updatedAt: Date.now(),
+      };
+
+      saveUserSession(updatedSession);
+      setSessions(prev =>
+        prev.map(s => (s.id === activeSessionId ? updatedSession : s))
+      );
     } catch (err: any) {
       console.error('Chat error:', err);
       setMessages(prev =>
@@ -240,7 +442,7 @@ export default function Home() {
           msg.id === assistantMessageId
             ? {
                 ...msg,
-                content: `⚠️ Error: ${err.message || 'Failed to reach OpenRouter Gemma service. Please check your connection and configuration.'}`,
+                content: `⚠️ Error: ${err.message || 'Failed to reach OpenRouter service.'}`,
               }
             : msg
         )
@@ -250,22 +452,11 @@ export default function Home() {
     }
   };
 
-  const handleClearChat = () => {
-    if (confirm('Clear the current conversation?')) {
-      setMessages([]);
-    }
-  };
-
-  const openDocViewer = (filename: string) => {
-    const doc = knowledgeDocs.find(d => d.filename === filename);
-    if (doc) {
-      setSelectedDoc(doc);
-    }
-  };
+  const groupedSessions = groupSessionsByDate(sessions);
 
   return (
     <div className="app-container">
-      {/* Mobile Backdrop */}
+      {/* Sidebar Mobile Backdrop */}
       {mobileMenuOpen && (
         <div
           className="mobile-sidebar-backdrop"
@@ -273,89 +464,301 @@ export default function Home() {
         />
       )}
 
-      {/* Sidebar Knowledge Base Drawer */}
-      <aside className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
+      {/* Sidebar */}
+      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-header">
-          <div className="logo-container">
+          <div className="logo-group">
             <div className="logo-mark">A</div>
             <div className="logo-text">
-              <h1>Abhij-AI</h1>
-              <span>Gemma Knowledge Base</span>
+              <h1 className="pixel-font">Abhij-AI</h1>
+              <span>Knowledge Assistant</span>
             </div>
           </div>
           <button
-            className="icon-btn mobile-close"
+            className="icon-btn mobile-close-btn"
             onClick={() => setMobileMenuOpen(false)}
-            aria-label="Close menu"
+            aria-label="Close sidebar"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="sidebar-content">
-          <div className="sidebar-section">
-            <h3>
-              <span>Knowledge Base</span>
-              <span className="badge-text">{knowledgeDocs.length} files</span>
-            </h3>
-            <div className="doc-list">
-              {knowledgeDocs.length === 0 ? (
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  No documents found in /knowledge folder.
-                </div>
-              ) : (
-                knowledgeDocs.map(doc => (
-                  <div
-                    key={doc.filename}
-                    className="doc-item"
-                    onClick={() => {
-                      setSelectedDoc(doc);
-                      setMobileMenuOpen(false);
-                    }}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <FileText size={16} className="doc-icon" />
-                    <div className="doc-info">
-                      <div className="doc-name">{doc.title}</div>
-                      <div className="doc-meta">
-                        <span className="doc-type-pill">{doc.filetype ? doc.filetype.toUpperCase() : 'DOC'}</span>
-                        <span>{doc.filename} · {doc.sectionsCount} sections</span>
-                      </div>
-                    </div>
-                    <ChevronRight size={14} color="var(--text-muted)" />
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="sidebar-section">
-            <h3>System Grounding</h3>
-            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-              Queries are mapped to local Markdown chunks. Answers are strictly synthesized
-              from these documents using a moderate LLM temperature (0.2).
-            </div>
-          </div>
+        {/* New Chat Button */}
+        <div className="sidebar-action-row">
+          <button className="new-chat-btn" onClick={handleNewChat}>
+            <Plus size={16} />
+            <span>New Chat</span>
+          </button>
         </div>
 
+        {/* Segmented Switcher: Chats vs Knowledge Docs */}
+        <div className="sidebar-segmented-tabs">
+          <button
+            className={`segmented-tab ${sidebarTab === 'chats' ? 'active' : ''}`}
+            onClick={() => setSidebarTab('chats')}
+          >
+            <MessageSquare size={14} />
+            <span>Chats ({sessions.length})</span>
+          </button>
+          <button
+            className={`segmented-tab ${sidebarTab === 'docs' ? 'active' : ''}`}
+            onClick={() => setSidebarTab('docs')}
+          >
+            <FileText size={14} />
+            <span>Docs ({knowledgeDocs.length})</span>
+          </button>
+        </div>
+
+        {/* Sidebar Body */}
+        <div className="sidebar-content">
+          {sidebarTab === 'chats' ? (
+            <div className="chat-history-container">
+              {sessions.length === 0 ? (
+                <div className="empty-history-text">
+                  No conversation history yet. Start a new chat!
+                </div>
+              ) : (
+                <>
+                  {/* Today */}
+                  {groupedSessions.today.length > 0 && (
+                    <div className="history-group">
+                      <div className="history-group-title">Today</div>
+                      {groupedSessions.today.map(session => (
+                        <div
+                          key={session.id}
+                          className={`history-item ${session.id === currentSessionId ? 'active' : ''}`}
+                          onClick={() => handleSelectSession(session)}
+                        >
+                          <MessageSquare size={14} className="history-item-icon" />
+                          {editingSessionId === session.id ? (
+                            <form
+                              onSubmit={e => handleSaveRename(session.id, e)}
+                              className="rename-inline-form"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <input
+                                type="text"
+                                value={editingTitleText}
+                                onChange={e => setEditingTitleText(e.target.value)}
+                                autoFocus
+                                className="rename-inline-input"
+                              />
+                              <button type="submit" className="rename-btn-check">
+                                <Check size={12} />
+                              </button>
+                            </form>
+                          ) : (
+                            <span className="history-item-title">{session.title}</span>
+                          )}
+                          <div className="history-item-actions">
+                            <button
+                              className="history-action-btn"
+                              title="Rename chat"
+                              onClick={e => handleStartRename(session, e)}
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button
+                              className="history-action-btn danger"
+                              title="Delete chat"
+                              onClick={e => handleDeleteSession(session.id, e)}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Previous 7 Days */}
+                  {groupedSessions.previous7Days.length > 0 && (
+                    <div className="history-group">
+                      <div className="history-group-title">Previous 7 Days</div>
+                      {groupedSessions.previous7Days.map(session => (
+                        <div
+                          key={session.id}
+                          className={`history-item ${session.id === currentSessionId ? 'active' : ''}`}
+                          onClick={() => handleSelectSession(session)}
+                        >
+                          <MessageSquare size={14} className="history-item-icon" />
+                          {editingSessionId === session.id ? (
+                            <form
+                              onSubmit={e => handleSaveRename(session.id, e)}
+                              className="rename-inline-form"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <input
+                                type="text"
+                                value={editingTitleText}
+                                onChange={e => setEditingTitleText(e.target.value)}
+                                autoFocus
+                                className="rename-inline-input"
+                              />
+                              <button type="submit" className="rename-btn-check">
+                                <Check size={12} />
+                              </button>
+                            </form>
+                          ) : (
+                            <span className="history-item-title">{session.title}</span>
+                          )}
+                          <div className="history-item-actions">
+                            <button
+                              className="history-action-btn"
+                              title="Rename chat"
+                              onClick={e => handleStartRename(session, e)}
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button
+                              className="history-action-btn danger"
+                              title="Delete chat"
+                              onClick={e => handleDeleteSession(session.id, e)}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Older */}
+                  {groupedSessions.older.length > 0 && (
+                    <div className="history-group">
+                      <div className="history-group-title">Older</div>
+                      {groupedSessions.older.map(session => (
+                        <div
+                          key={session.id}
+                          className={`history-item ${session.id === currentSessionId ? 'active' : ''}`}
+                          onClick={() => handleSelectSession(session)}
+                        >
+                          <MessageSquare size={14} className="history-item-icon" />
+                          {editingSessionId === session.id ? (
+                            <form
+                              onSubmit={e => handleSaveRename(session.id, e)}
+                              className="rename-inline-form"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <input
+                                type="text"
+                                value={editingTitleText}
+                                onChange={e => setEditingTitleText(e.target.value)}
+                                autoFocus
+                                className="rename-inline-input"
+                              />
+                              <button type="submit" className="rename-btn-check">
+                                <Check size={12} />
+                              </button>
+                            </form>
+                          ) : (
+                            <span className="history-item-title">{session.title}</span>
+                          )}
+                          <div className="history-item-actions">
+                            <button
+                              className="history-action-btn"
+                              title="Rename chat"
+                              onClick={e => handleStartRename(session, e)}
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button
+                              className="history-action-btn danger"
+                              title="Delete chat"
+                              onClick={e => handleDeleteSession(session.id, e)}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="sidebar-section">
+              <div className="doc-list">
+                {knowledgeDocs.length === 0 ? (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    No documents found in /knowledge folder.
+                  </div>
+                ) : (
+                  knowledgeDocs.map(doc => (
+                    <div
+                      key={doc.filename}
+                      className="doc-item"
+                      onClick={() => {
+                        setSelectedDoc(doc);
+                        setMobileMenuOpen(false);
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <FileText size={16} className="doc-icon" />
+                      <div className="doc-info">
+                        <div className="doc-name">{doc.title}</div>
+                        <div className="doc-meta">
+                          <span className="doc-type-pill">{doc.filetype ? doc.filetype.toUpperCase() : 'DOC'}</span>
+                          <span>{doc.filename} · {doc.sectionsCount} sections</span>
+                        </div>
+                      </div>
+                      <ChevronRight size={14} color="var(--text-muted)" />
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar Footer */}
         <div className="sidebar-footer">
+          {/* Current User Card */}
+          {currentUser ? (
+            <div className="sidebar-user-card">
+              <div className="user-avatar-pill">
+                <span className="user-avatar-initial">
+                  {currentUser.username.charAt(0).toUpperCase()}
+                </span>
+                <span className="user-avatar-name">{currentUser.username}</span>
+              </div>
+              <button
+                className="icon-btn-subtle"
+                onClick={handleLogout}
+                title="Sign out"
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
+          ) : (
+            <button
+              className="sidebar-auth-btn"
+              onClick={() => setShowAuthModal(true)}
+            >
+              <LogIn size={14} />
+              <span>Sign In / Register</span>
+            </button>
+          )}
+
           <Link href="/admin" className="sidebar-admin-btn">
             <Settings size={14} />
             <span>Manage Knowledge (Admin)</span>
           </Link>
+
           <div className="config-badge-group">
             <span className="config-badge" title="Active Model">
               <Cpu size={12} />
-              gemma-2-9b-it
+              Gemma 3 12B
             </span>
             <span className="config-badge" title="Strict Grounding Temperature">
               <Thermometer size={12} />
               Temp: 0.2
             </span>
-            <span className="config-badge" title="Strict factual alignment">
+            <span className="config-badge" title="Factual alignment">
               <ShieldCheck size={12} />
-              RAG Guarded
+              Grounded
             </span>
           </div>
         </div>
@@ -374,29 +777,31 @@ export default function Home() {
               <Menu size={18} />
             </button>
             <div className="header-title-wrapper">
-              <h2>Document Grounded Assistant</h2>
+              <h2>
+                {sessions.find(s => s.id === currentSessionId)?.title || 'Document Grounded Assistant'}
+              </h2>
               <div className="header-status-indicator">
                 <span className="status-dot" />
-                <span>OpenRouter Gemma · Temperature 0.2</span>
+                <span>OpenRouter Gemma · Humanized Knowledge Assistant</span>
               </div>
             </div>
           </div>
 
           <div className="header-actions">
+            <button
+              className="header-new-chat-btn"
+              onClick={handleNewChat}
+              title="Start a new chat"
+            >
+              <Plus size={14} />
+              <span>New</span>
+            </button>
+
             <Link href="/admin" className="header-admin-pill" title="Knowledge Base Admin Panel">
               <Settings size={14} />
               <span>Admin</span>
             </Link>
-            {messages.length > 0 && (
-              <button
-                className="icon-btn"
-                onClick={handleClearChat}
-                title="Clear conversation"
-                aria-label="Clear chat"
-              >
-                <Trash2 size={17} />
-              </button>
-            )}
+
             <button
               className="icon-btn"
               onClick={toggleTheme}
@@ -408,178 +813,197 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Message Feed */}
+        {/* Message Stream Area */}
         <div className="messages-container">
           {messages.length === 0 ? (
             <div className="welcome-hero">
-              <div className="hero-icon">
-                <BookOpen size={28} />
+              <div className="hero-badge">
+                <Sparkles size={14} />
+                <span>Conversational & Factual Grounding</span>
               </div>
-              <h2>Ask Your Document Knowledge Base</h2>
+              <h2 className="pixel-font">Ask Abhij-AI Anything</h2>
               <p>
-                This chatbot is strictly grounded in your repository’s local <code>.md</code>, <code>.docx</code>, and <code>.doc</code> files.
-                Powered by OpenRouter's Gemma model at a moderate temperature (0.2) to prevent fabrication.
+                Strictly grounded in your Markdown and Word documentation with natural, humanized explanations. Say hi or select an inquiry below to begin.
               </p>
 
               <div className="suggestions-grid">
                 {STARTER_QUERIES.map((item, idx) => (
-                  <div
+                  <button
                     key={idx}
                     className="suggestion-card"
                     onClick={() => handleSubmit(item.query)}
-                    role="button"
-                    tabIndex={0}
                   >
-                    <div className="query">{item.query}</div>
-                    <div className="context-hint">
-                      Source doc: <code>{item.context}</code>
+                    <div className="suggestion-query">{item.query}</div>
+                    <div className="suggestion-context">
+                      <span>{item.context}</span>
+                      <ChevronRight size={13} />
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
           ) : (
-            messages.map((msg, index) => {
-              const isAssistant = msg.role === 'assistant';
-              const { markdownBody, suggestedQuestions } = isAssistant
-                ? parseAssistantResponse(msg.content)
-                : { markdownBody: msg.content, suggestedQuestions: [] };
+            <div className="messages-list">
+              {messages.map(message => {
+                const isUser = message.role === 'user';
+                const { markdownBody, suggestedQuestions } = isUser
+                  ? { markdownBody: message.content, suggestedQuestions: [] }
+                  : parseAssistantResponse(message.content);
 
-              return (
-                <div key={msg.id || index} className={`message-row ${msg.role}`}>
-                  {isAssistant && (
-                    <div className="message-avatar assistant-avatar">
-                      <Sparkles size={16} />
+                return (
+                  <div
+                    key={message.id}
+                    className={`message-wrapper ${isUser ? 'user-align' : 'assistant-align'}`}
+                  >
+                    <div className={`message-avatar ${isUser ? 'user-avatar' : 'assistant-avatar'}`}>
+                      {isUser ? (
+                        currentUser ? currentUser.username.charAt(0).toUpperCase() : 'U'
+                      ) : (
+                        <span className="pixel-font">A</span>
+                      )}
                     </div>
-                  )}
-
-                  <div className="message-bubble">
-                    {isAssistant ? (
-                      <>
-                        {msg.content === '' && isLoading ? (
-                          <div className="typing-indicator">
-                            <span className="typing-dot" />
-                            <span className="typing-dot" />
-                            <span className="typing-dot" />
-                          </div>
-                        ) : (
-                          <div className="markdown-content">
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              components={{
-                                img: ({ node, ...props }) => (
-                                  <span
-                                    className="doc-image-wrapper"
-                                    onClick={() => setLightboxImage({ src: (props.src as string) || '', alt: (props.alt as string) || '' })}
-                                    role="button"
-                                    tabIndex={0}
-                                    title="Click to zoom image"
-                                  >
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img
-                                      src={props.src}
-                                      alt={props.alt || 'Document visual'}
-                                      className="doc-rendered-img"
-                                      loading="lazy"
-                                    />
-                                    <span className="doc-image-overlay">
-                                      <ZoomIn size={14} />
-                                      <span>Click to enlarge</span>
+                    <div className={`message-bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}`}>
+                      {isUser ? (
+                        <div className="user-text">{message.content}</div>
+                      ) : (
+                        <>
+                          {message.content === '' && isLoading ? (
+                            <div className="thinking-indicator">
+                              <span className="dot dot-1" />
+                              <span className="dot dot-2" />
+                              <span className="dot dot-3" />
+                            </div>
+                          ) : (
+                            <div className="markdown-content">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  img: ({ node, ...props }) => (
+                                    <span
+                                      className="doc-image-wrapper"
+                                      onClick={() =>
+                                        setLightboxImage({
+                                          src: (props.src as string) || '',
+                                          alt: (props.alt as string) || '',
+                                        })
+                                      }
+                                      role="button"
+                                      tabIndex={0}
+                                      title="Click to zoom image"
+                                    >
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={props.src}
+                                        alt={props.alt || 'Document visual'}
+                                        className="doc-rendered-img"
+                                        loading="lazy"
+                                      />
+                                      <span className="doc-image-overlay">
+                                        <ZoomIn size={14} />
+                                        <span>Click to enlarge</span>
+                                      </span>
+                                      {props.alt && (
+                                        <span className="doc-image-caption">{props.alt}</span>
+                                      )}
                                     </span>
-                                    {props.alt && <span className="doc-image-caption">{props.alt}</span>}
-                                  </span>
-                                ),
-                              }}
-                            >
-                              {markdownBody}
-                            </ReactMarkdown>
-                          </div>
-                        )}
-
-                        {/* Source Citations */}
-                        {msg.sources && msg.sources.length > 0 && (
-                          <div className="sources-container">
-                            <span className="source-label">Referenced:</span>
-                            {msg.sources.map(src => (
-                              <button
-                                key={src}
-                                className="source-chip"
-                                onClick={() => openDocViewer(src)}
-                                title="Click to view full markdown document"
+                                  ),
+                                }}
                               >
-                                <FileText size={11} />
-                                <span>{src}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                                {markdownBody}
+                              </ReactMarkdown>
+                            </div>
+                          )}
 
-                        {/* Suggested Follow-up Questions */}
-                        {suggestedQuestions.length > 0 && (
-                          <div className="followup-container">
-                            <div className="followup-header">
-                              <Sparkles size={12} className="followup-icon" />
-                              <span>Suggested Next Questions</span>
+                          {/* Source Citations */}
+                          {message.sources && message.sources.length > 0 && (
+                            <div className="sources-container">
+                              <span className="sources-label">Referenced:</span>
+                              <div className="sources-chips">
+                                {message.sources.map(source => {
+                                  const matchingDoc = knowledgeDocs.find(
+                                    d => d.filename === source
+                                  );
+                                  return (
+                                    <button
+                                      key={source}
+                                      className="source-chip"
+                                      onClick={() => matchingDoc && setSelectedDoc(matchingDoc)}
+                                      title={`View source file ${source}`}
+                                    >
+                                      <FileText size={12} />
+                                      <span>{source}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                            <div className="followup-chips">
-                              {suggestedQuestions.map((question, qIdx) => (
-                                <button
-                                  key={qIdx}
-                                  className="followup-chip"
-                                  onClick={() => handleSubmit(question)}
-                                  disabled={isLoading}
-                                  title="Click to ask this question"
-                                >
-                                  <span>{question}</span>
-                                  <ArrowRight size={12} className="chip-arrow" />
-                                </button>
-                              ))}
+                          )}
+
+                          {/* Interactive Suggested Questions */}
+                          {suggestedQuestions.length > 0 && (
+                            <div className="followup-container">
+                              <div className="followup-header">
+                                <Sparkles size={13} />
+                                <span>Suggested Next Questions</span>
+                              </div>
+                              <div className="followup-chips">
+                                {suggestedQuestions.map((question, qIdx) => (
+                                  <button
+                                    key={qIdx}
+                                    className="followup-chip"
+                                    onClick={() => handleSubmit(question)}
+                                    disabled={isLoading}
+                                  >
+                                    <span>{question}</span>
+                                    <ArrowRight size={13} />
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div>{msg.content}</div>
-                    )}
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
           )}
-          <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Bar */}
+        {/* Input Dock */}
         <div className="input-dock">
-          <div className="input-wrapper">
-            <div className="input-box">
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={handleTextareaInput}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask anything based on your markdown and doc files..."
-                rows={1}
-                className="chat-textarea"
-                disabled={isLoading}
-              />
-              <button
-                className="send-btn"
-                onClick={() => handleSubmit()}
-                disabled={!input.trim() || isLoading}
-                aria-label="Send query"
-              >
-                <Send size={16} />
-              </button>
-            </div>
-            <div className="input-hint">
-              Abhij-AI strictly references local docs (<code>.md</code>, <code>.docx</code>, <code>.doc</code>). Shift+Enter for new line.
-            </div>
+          <div className="input-bar">
+            <textarea
+              ref={textareaRef}
+              className="chat-textarea"
+              placeholder={
+                currentUser
+                  ? `Message Abhij-AI (${currentUser.username})...`
+                  : 'Message Abhij-AI...'
+              }
+              value={input}
+              onChange={handleTextareaInput}
+              onKeyDown={handleKeyDown}
+              rows={1}
+            />
+            <button
+              className="send-btn"
+              onClick={() => handleSubmit()}
+              disabled={!input.trim() || isLoading}
+              aria-label="Send message"
+            >
+              <Send size={16} />
+            </button>
+          </div>
+          <div className="input-caption">
+            Abhij-AI is strictly grounded in Markdown and Word knowledge base documents. Press Enter to send, Shift+Enter for new line.
           </div>
         </div>
       </main>
 
-      {/* Markdown Document Viewer Modal */}
+      {/* DOCUMENT VIEWER MODAL */}
       {selectedDoc && (
         <div className="modal-overlay" onClick={() => setSelectedDoc(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -604,7 +1028,12 @@ export default function Home() {
                     img: ({ node, ...props }) => (
                       <span
                         className="doc-image-wrapper"
-                        onClick={() => setLightboxImage({ src: (props.src as string) || '', alt: (props.alt as string) || '' })}
+                        onClick={() =>
+                          setLightboxImage({
+                            src: (props.src as string) || '',
+                            alt: (props.alt as string) || '',
+                          })
+                        }
                         role="button"
                         tabIndex={0}
                         title="Click to zoom image"
@@ -633,7 +1062,91 @@ export default function Home() {
         </div>
       )}
 
-      {/* Image Lightbox Modal */}
+      {/* USER AUTH MODAL */}
+      {showAuthModal && (
+        <div className="modal-overlay" onClick={() => setShowAuthModal(false)}>
+          <div className="modal-content auth-modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="auth-modal-title-group">
+                <div className="logo-mark">A</div>
+                <div>
+                  <h3 className="pixel-font">Abhij-AI</h3>
+                  <span className="auth-modal-subtitle">User Authentication</span>
+                </div>
+              </div>
+              <button
+                className="icon-btn"
+                onClick={() => setShowAuthModal(false)}
+                aria-label="Close modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="auth-modal-tabs">
+              <button
+                className={`auth-modal-tab ${authTab === 'login' ? 'active' : ''}`}
+                onClick={() => {
+                  setAuthTab('login');
+                  setAuthError('');
+                }}
+              >
+                <LogIn size={14} />
+                <span>Sign In</span>
+              </button>
+              <button
+                className={`auth-modal-tab ${authTab === 'register' ? 'active' : ''}`}
+                onClick={() => {
+                  setAuthTab('register');
+                  setAuthError('');
+                }}
+              >
+                <UserPlus size={14} />
+                <span>Create Account</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleAuthSubmit} className="auth-modal-form">
+              <div className="auth-field">
+                <label>Username</label>
+                <input
+                  type="text"
+                  placeholder="e.g. abhijay"
+                  value={authUsername}
+                  onChange={e => setAuthUsername(e.target.value)}
+                  className="auth-input"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="auth-field">
+                <label>Password</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={authPassword}
+                  onChange={e => setAuthPassword(e.target.value)}
+                  className="auth-input"
+                  required
+                />
+              </div>
+
+              {authError && <div className="auth-error-banner">{authError}</div>}
+
+              <button type="submit" className="primary-action-btn" style={{ width: '100%', marginTop: '0.5rem' }}>
+                {authTab === 'login' ? 'Sign In' : 'Create Account & Continue'}
+              </button>
+
+              <div className="auth-modal-footer-note">
+                Chat history and settings are automatically saved and isolated for each account.
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* IMAGE LIGHTBOX MODAL */}
       {lightboxImage && (
         <div className="lightbox-overlay" onClick={() => setLightboxImage(null)}>
           <div className="lightbox-content" onClick={e => e.stopPropagation()}>

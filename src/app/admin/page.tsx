@@ -23,7 +23,9 @@ import {
   HardDrive,
   Layers,
   Database,
-  ZoomIn
+  ZoomIn,
+  Loader2,
+  Files
 } from 'lucide-react';
 
 interface KnowledgeDoc {
@@ -45,6 +47,19 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Upload & Drag-and-Drop state
+  const [isZoneDragging, setIsZoneDragging] = useState(false);
+  const [isWindowDragging, setIsWindowDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    current: number;
+    total: number;
+    currentFilename: string;
+    percent: number;
+  } | null>(null);
+  const windowDragCounter = useRef(0);
+  const zoneDragCounter = useRef(0);
 
   // Document creation / editing state
   const [editingFilename, setEditingFilename] = useState<string | null>(null);
@@ -193,46 +208,177 @@ export default function AdminPage() {
     }, 4000);
   };
 
-  // Upload handler
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  // Multi-file upload handler
+  const uploadFiles = async (files: File[]) => {
     if (!files || files.length === 0) return;
+    if (isUploading) return;
 
-    const file = files[0];
-    const formData = new FormData();
-    formData.append('file', file);
+    const validExtensions = ['.md', '.markdown', '.docx', '.doc', '.txt'];
+    const validFiles: File[] = [];
+    const invalidFiles: File[] = [];
 
+    for (const file of files) {
+      const ext = '.' + (file.name.split('.').pop() || '').toLowerCase();
+      if (validExtensions.includes(ext)) {
+        validFiles.push(file);
+      } else {
+        invalidFiles.push(file);
+      }
+    }
+
+    if (invalidFiles.length > 0) {
+      const names = invalidFiles.map(f => f.name).slice(0, 3).join(', ');
+      const extra = invalidFiles.length > 3 ? ` and ${invalidFiles.length - 3} more` : '';
+      showToast('error', `Skipped unsupported file(s): ${names}${extra}. Supported: .md, .docx, .doc, .txt`);
+    }
+
+    if (validFiles.length === 0) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setIsUploading(true);
     setIsLoading(true);
-    try {
-      const res = await fetch('/api/knowledge', {
-        method: 'POST',
-        headers: {
-          'x-admin-key': passcode,
-        },
-        body: formData,
-      });
 
-      const data = await res.json();
-      if (!res.ok) {
-        if (res.status === 401) {
-          sessionStorage.removeItem('abhij_admin_key');
-          setIsAuthenticated(false);
-          setAuthError('Unauthorized: Your admin passcode is invalid or has changed. Please re-enter the passcode.');
-          return;
+    const successFiles: string[] = [];
+    const failedFiles: { name: string; error: string }[] = [];
+
+    try {
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
+        setUploadProgress({
+          current: i + 1,
+          total: validFiles.length,
+          currentFilename: file.name,
+          percent: Math.round((i / validFiles.length) * 100),
+        });
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+          const res = await fetch('/api/knowledge', {
+            method: 'POST',
+            headers: {
+              'x-admin-key': passcode,
+            },
+            body: formData,
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            if (res.status === 401) {
+              sessionStorage.removeItem('abhij_admin_key');
+              setIsAuthenticated(false);
+              setAuthError('Unauthorized: Your admin passcode is invalid or has changed. Please re-enter the passcode.');
+              return;
+            }
+            failedFiles.push({ name: file.name, error: data.error || `HTTP ${res.status}` });
+          } else {
+            successFiles.push(file.name);
+          }
+        } catch (err: any) {
+          failedFiles.push({ name: file.name, error: err.message || 'Network error' });
         }
-        throw new Error(data.error || `HTTP ${res.status}`);
       }
 
-      showToast('success', `"${file.name}" uploaded and indexed successfully!`);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      setUploadProgress({
+        current: validFiles.length,
+        total: validFiles.length,
+        currentFilename: 'Complete!',
+        percent: 100,
+      });
+
+      if (failedFiles.length === 0) {
+        showToast(
+          'success',
+          validFiles.length === 1
+            ? `"${validFiles[0].name}" uploaded and indexed successfully!`
+            : `All ${validFiles.length} files uploaded and indexed successfully!`
+        );
+      } else if (successFiles.length === 0) {
+        showToast(
+          'error',
+          `Failed to upload ${failedFiles.length} file(s): ${failedFiles.map(f => f.name).join(', ')}`
+        );
+      } else {
+        showToast(
+          'error',
+          `Uploaded ${successFiles.length} file(s), ${failedFiles.length} failed: ${failedFiles.map(f => f.name).join(', ')}`
+        );
+      }
+
       await refreshDocuments();
-      setActiveTab('documents');
+      if (successFiles.length > 0) {
+        setActiveTab('documents');
+      }
     } catch (err: any) {
       showToast('error', err.message || 'File upload failed');
     } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
       setIsLoading(false);
+      setIsUploading(false);
+      setUploadProgress(null);
     }
   };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    uploadFiles(Array.from(files));
+  };
+
+  // Global window drag-and-drop listener for entire admin dashboard
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleWindowDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+        windowDragCounter.current += 1;
+        if (windowDragCounter.current === 1) {
+          setIsWindowDragging(true);
+        }
+      }
+    };
+
+    const handleWindowDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      windowDragCounter.current -= 1;
+      if (windowDragCounter.current <= 0) {
+        windowDragCounter.current = 0;
+        setIsWindowDragging(false);
+      }
+    };
+
+    const handleWindowDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    };
+
+    const handleWindowDrop = (e: DragEvent) => {
+      e.preventDefault();
+      windowDragCounter.current = 0;
+      setIsWindowDragging(false);
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        uploadFiles(Array.from(e.dataTransfer.files));
+      }
+    };
+
+    window.addEventListener('dragenter', handleWindowDragEnter);
+    window.addEventListener('dragleave', handleWindowDragLeave);
+    window.addEventListener('dragover', handleWindowDragOver);
+    window.addEventListener('drop', handleWindowDrop);
+
+    return () => {
+      window.removeEventListener('dragenter', handleWindowDragEnter);
+      window.removeEventListener('dragleave', handleWindowDragLeave);
+      window.removeEventListener('dragover', handleWindowDragOver);
+      window.removeEventListener('drop', handleWindowDrop);
+    };
+  }, [isAuthenticated, passcode, isUploading]);
 
   // Save or Update Markdown Document
   const handleSaveMarkdown = async (e: React.FormEvent) => {
@@ -636,31 +782,102 @@ export default function AdminPage() {
         {activeTab === 'upload' && (
           <div className="tab-content upload-tab-content">
             <div
-              className="dropzone-box"
-              onClick={() => fileInputRef.current?.click()}
+              className={`dropzone-box ${isZoneDragging ? 'dragging' : ''} ${isUploading ? 'uploading' : ''}`}
+              onClick={() => {
+                if (!isUploading) fileInputRef.current?.click();
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                zoneDragCounter.current += 1;
+                if (zoneDragCounter.current === 1) {
+                  setIsZoneDragging(true);
+                }
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer) {
+                  e.dataTransfer.dropEffect = 'copy';
+                }
+                setIsZoneDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                zoneDragCounter.current -= 1;
+                if (zoneDragCounter.current <= 0) {
+                  zoneDragCounter.current = 0;
+                  setIsZoneDragging(false);
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                zoneDragCounter.current = 0;
+                setIsZoneDragging(false);
+                if (!isUploading && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  uploadFiles(Array.from(e.dataTransfer.files));
+                }
+              }}
             >
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 accept=".md,.markdown,.docx,.doc,.txt"
-                onChange={handleFileUpload}
+                onChange={handleFileInputChange}
                 style={{ display: 'none' }}
               />
-              <div className="dropzone-icon">
-                <Upload size={32} />
-              </div>
-              <h3>Click to select or drag document here</h3>
-              <p>
-                Supported formats: <strong>.md</strong>, <strong>.markdown</strong>, <strong>.docx</strong>, <strong>.doc</strong>, <strong>.txt</strong>
-              </p>
-              <span className="dropzone-hint">
-                Files are automatically indexed into the Abhij-AI retrieval engine upon upload.
-              </span>
+
+              {isUploading && uploadProgress ? (
+                <>
+                  <div className="dropzone-icon upload-spin">
+                    <Loader2 size={30} />
+                  </div>
+                  <h3>Uploading {uploadProgress.current} of {uploadProgress.total}...</h3>
+                  <div className="dropzone-progress-box">
+                    <div className="dropzone-progress-meta">
+                      <span className="dropzone-current-filename" title={uploadProgress.currentFilename}>
+                        {uploadProgress.currentFilename}
+                      </span>
+                      <span>{uploadProgress.percent}%</span>
+                    </div>
+                    <div className="dropzone-progress-bar-bg">
+                      <div
+                        className="dropzone-progress-bar-fill"
+                        style={{ width: `${uploadProgress.percent}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="dropzone-hint" style={{ marginTop: '0.85rem' }}>
+                    Indexing into Abhij-AI vector search & knowledge store...
+                  </span>
+                </>
+              ) : (
+                <>
+                  <div className="dropzone-icon">
+                    {isZoneDragging ? <Files size={30} /> : <Upload size={30} />}
+                  </div>
+                  <h3>
+                    {isZoneDragging
+                      ? 'Drop files to upload now'
+                      : 'Click to select or drag documents here'}
+                  </h3>
+                  <p>
+                    Select or drag multiple files together. Supported formats: <strong>.md</strong>, <strong>.markdown</strong>, <strong>.docx</strong>, <strong>.doc</strong>, <strong>.txt</strong>
+                  </p>
+                  <span className="dropzone-hint">
+                    Files are automatically extracted, parsed, and indexed into the Abhij-AI retrieval engine upon upload.
+                  </span>
+                </>
+              )}
             </div>
 
             <div className="upload-tips-card">
               <h4>Knowledge Document Best Practices</h4>
               <ul>
+                <li>You can select or drag & drop multiple documents simultaneously.</li>
                 <li>Use clean headers (`#`, `##`, `###`) to create logical section boundaries.</li>
                 <li>Word (`.docx`) files with embedded diagrams are automatically extracted.</li>
                 <li>Factual, concise descriptions result in the highest retrieval accuracy.</li>
@@ -870,6 +1087,19 @@ export default function AdminPage() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={lightboxImage.src} alt={lightboxImage.alt} className="lightbox-img" />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* FULL WINDOW DRAG OVERLAY */}
+      {isWindowDragging && (
+        <div className="admin-window-drop-overlay">
+          <div className="admin-window-drop-card">
+            <div className="dropzone-icon" style={{ width: 68, height: 68, margin: '0 0 1rem 0', color: '#60a5fa' }}>
+              <Files size={36} />
+            </div>
+            <h2>Drop files anywhere to upload</h2>
+            <p>Release to upload multiple documents into the knowledge base</p>
           </div>
         </div>
       )}

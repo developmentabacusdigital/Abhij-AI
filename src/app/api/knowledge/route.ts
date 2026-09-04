@@ -52,37 +52,84 @@ export async function POST(req: NextRequest) {
     // Handle Multipart Form Data (File Uploads)
     if (contentType.includes('multipart/form-data')) {
       const formData = await req.formData();
-      const file = formData.get('file') as File | null;
+      const filesFromForm = [
+        ...(formData.getAll('files') as File[]),
+        ...(formData.getAll('file') as File[]),
+      ];
+      // Deduplicate file references if any
+      const uniqueFiles: File[] = [];
+      const seen = new Set<string>();
+      for (const f of filesFromForm) {
+        if (f && f.name && !seen.has(f.name)) {
+          seen.add(f.name);
+          uniqueFiles.push(f);
+        }
+      }
 
-      if (!file) {
+      if (uniqueFiles.length === 0) {
         return NextResponse.json(
           { error: 'No file provided in form data' },
           { status: 400 }
         );
       }
 
-      const filename = file.name;
-      if (!isSafeFilename(filename)) {
-        return NextResponse.json(
-          { error: 'Unsupported or invalid file format. Supported: .md, .markdown, .docx, .doc, .txt' },
-          { status: 400 }
-        );
+      // Single file upload (standard behavior)
+      if (uniqueFiles.length === 1) {
+        const file = uniqueFiles[0];
+        const filename = file.name;
+        if (!isSafeFilename(filename)) {
+          return NextResponse.json(
+            { error: 'Unsupported or invalid file format. Supported: .md, .markdown, .docx, .doc, .txt' },
+            { status: 400 }
+          );
+        }
+
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const result = await saveKnowledgeDocument(filename, buffer);
+
+        if (!result.success) {
+          return NextResponse.json(
+            { error: result.error || 'Failed to save file' },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: `File ${filename} uploaded successfully`,
+          filename,
+        });
       }
 
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const result = await saveKnowledgeDocument(filename, buffer);
+      // Batch multiple files upload
+      const uploaded: string[] = [];
+      const errors: { filename: string; error: string }[] = [];
 
-      if (!result.success) {
-        return NextResponse.json(
-          { error: result.error || 'Failed to save file' },
-          { status: 500 }
-        );
+      for (const file of uniqueFiles) {
+        const filename = file.name;
+        if (!isSafeFilename(filename)) {
+          errors.push({ filename, error: 'Unsupported or invalid file format' });
+          continue;
+        }
+
+        try {
+          const buffer = Buffer.from(await file.arrayBuffer());
+          const result = await saveKnowledgeDocument(filename, buffer);
+          if (result.success) {
+            uploaded.push(filename);
+          } else {
+            errors.push({ filename, error: result.error || 'Failed to save file' });
+          }
+        } catch (err: any) {
+          errors.push({ filename, error: err.message || 'Error processing file' });
+        }
       }
 
       return NextResponse.json({
-        success: true,
-        message: `File ${filename} uploaded successfully`,
-        filename,
+        success: uploaded.length > 0,
+        message: `Processed ${uniqueFiles.length} file(s): ${uploaded.length} succeeded, ${errors.length} failed`,
+        uploaded,
+        errors,
       });
     }
 

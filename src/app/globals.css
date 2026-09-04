@@ -1974,12 +1974,31 @@ button, input, textarea, select {
   text-align: center;
   cursor: pointer;
   background-color: var(--bg-surface);
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
 }
 
 .dropzone-box:hover {
   border-color: var(--accent-white);
   background-color: var(--bg-tertiary);
+}
+
+.dropzone-box.dragging {
+  border-color: #3b82f6 !important;
+  background-color: rgba(59, 130, 246, 0.08) !important;
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.2);
+  transform: scale(1.01);
+}
+
+.dropzone-box.uploading {
+  cursor: default;
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-subtle);
+}
+
+.dropzone-box * {
+  pointer-events: none;
 }
 
 .dropzone-icon {
@@ -1993,6 +2012,20 @@ button, input, textarea, select {
   justify-content: center;
   margin-bottom: 1.25rem;
   color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.dropzone-box.dragging .dropzone-icon {
+  background-color: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
+  color: #60a5fa;
+  transform: translateY(-2px);
+}
+
+.dropzone-icon.upload-spin {
+  animation: spin 1.2s linear infinite;
+  color: #60a5fa;
+  border-color: rgba(96, 165, 250, 0.4);
 }
 
 .dropzone-box h3 {
@@ -2009,6 +2042,90 @@ button, input, textarea, select {
 .dropzone-hint {
   font-size: 0.74rem;
   color: var(--text-muted);
+}
+
+/* Upload Progress Inside Dropzone */
+.dropzone-progress-box {
+  width: 100%;
+  max-width: 380px;
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dropzone-progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background-color: var(--bg-secondary);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.dropzone-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.dropzone-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.dropzone-current-filename {
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+/* Page-level Drag Overlay */
+.admin-window-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background-color: rgba(10, 12, 16, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border: 3px dashed #3b82f6;
+  box-shadow: inset 0 0 60px rgba(59, 130, 246, 0.25);
+  animation: fadeIn 0.15s ease-out;
+}
+
+.admin-window-drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2.5rem 3rem;
+  border-radius: 16px;
+  background-color: var(--bg-surface);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.admin-window-drop-card h2 {
+  font-size: 1.25rem;
+  margin-top: 1rem;
+  margin-bottom: 0.4rem;
+  color: #fff;
+}
+
+.admin-window-drop-card p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
 .upload-tips-card {

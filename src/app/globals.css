@@ -1262,6 +1262,32 @@ button, input, textarea, select {
     z-index: 35;
   }
 
+  .avatar-thought-bubble {
+    bottom: calc(100% - 4px);
+    right: 8px;
+  }
+
+  .thought-bubble-cloud {
+    font-size: 0.68rem;
+    padding: 0.22rem 0.55rem;
+    border-radius: 12px 12px 3px 12px;
+    gap: 0.2rem;
+  }
+
+  .thought-dot-lg {
+    width: 6px;
+    height: 6px;
+    margin-top: 2px;
+    margin-right: 8px;
+  }
+
+  .thought-dot-sm {
+    width: 3.5px;
+    height: 3.5px;
+    margin-top: 1px;
+    margin-right: 4px;
+  }
+
   .avatar-frame-inner {
     width: 60px;
     height: 60px;
@@ -2693,6 +2719,119 @@ button, input, textarea, select {
 /* ==========================================================================
    ROUND VIDEO AVATAR FRAME (BOTTOM RIGHT CORNER - 3 STATES)
    ========================================================================== */
+
+/* Thought Bubble above Avatar */
+.avatar-thought-bubble {
+  position: absolute;
+  bottom: calc(100% - 6px);
+  right: 18px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-decoration: none;
+  cursor: pointer;
+  animation: thoughtFloat 3.2s ease-in-out infinite;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.thought-bubble-cloud {
+  background: rgba(18, 18, 24, 0.94);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #f3f4f6;
+  padding: 0.35rem 0.8rem;
+  border-radius: 16px 16px 4px 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55), 0 0 14px rgba(255, 255, 255, 0.08);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.25s ease;
+}
+
+.thought-bubble-text {
+  line-height: 1;
+}
+
+.thought-bubble-icon {
+  color: #60a5fa;
+  opacity: 0.85;
+  transition: transform 0.2s ease;
+}
+
+[data-theme='light'] .thought-bubble-cloud {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #111827;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12), 0 0 10px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme='light'] .thought-bubble-icon {
+  color: #2563eb;
+}
+
+.thought-dot {
+  background: rgba(18, 18, 24, 0.94);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  transition: all 0.25s ease;
+}
+
+[data-theme='light'] .thought-dot {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+.thought-dot-lg {
+  width: 8px;
+  height: 8px;
+  margin-top: 3px;
+  margin-right: 12px;
+}
+
+.thought-dot-sm {
+  width: 5px;
+  height: 5px;
+  margin-top: 2px;
+  margin-right: 6px;
+}
+
+.avatar-thought-bubble:hover {
+  transform: translateY(-4px) scale(1.06);
+}
+
+.avatar-thought-bubble:hover .thought-bubble-cloud {
+  border-color: #60a5fa;
+  box-shadow: 0 6px 25px rgba(96, 165, 250, 0.4), 0 0 18px rgba(96, 165, 250, 0.25);
+  color: #93c5fd;
+}
+
+.avatar-thought-bubble:hover .thought-bubble-icon {
+  transform: translate(1px, -1px);
+  color: #93c5fd;
+}
+
+.avatar-thought-bubble:hover .thought-dot {
+  border-color: #60a5fa;
+  box-shadow: 0 2px 8px rgba(96, 165, 250, 0.4);
+}
+
+@keyframes thoughtFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
 .avatar-frame-container {
   position: fixed;
   bottom: 85px;

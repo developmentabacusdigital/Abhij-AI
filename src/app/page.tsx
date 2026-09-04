@@ -29,7 +29,8 @@ import {
   User as UserIcon,
   LogOut,
   LogIn,
-  UserPlus
+  UserPlus,
+  Navigation
 } from 'lucide-react';
 import {
   User,
@@ -1207,6 +1208,23 @@ export default function Home() {
 
       {/* Interactive Round Video Avatar Frame in Bottom-Right Corner */}
       <div className={`avatar-frame-container ${avatarState}`} title={`Abhij-AI (${avatarState})`}>
+        {/* Thought Bubble - Navigation to Gautam's on Google Maps */}
+        <a
+          href="https://www.google.com/maps/dir/?api=1&destination=22.5874109,88.4088797&destination_place_id=ChIJh89WnN11AjoR7R3ie41Ux4Q"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="avatar-thought-bubble"
+          title="Start trip to Gautam's from current location"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="thought-bubble-cloud">
+            <span className="thought-bubble-text">gautam&apos;s?</span>
+            <Navigation size={10} className="thought-bubble-icon" />
+          </span>
+          <span className="thought-dot thought-dot-lg" />
+          <span className="thought-dot thought-dot-sm" />
+        </a>
+
         <div className="avatar-frame-inner">
           {/* Idle Video */}
           <video
